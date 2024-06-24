@@ -1,19 +1,4 @@
-#
-# Licensed to the Apache Software Foundation (ASF) under one or more
-# contributor license agreements.  See the NOTICE file distributed with
-# this work for additional information regarding copyright ownership.
-# The ASF licenses this file to You under the Apache License, Version 2.0
-# (the "License"); you may not use this file except in compliance with
-# the License.  You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# syntax=docker/dockerfile:experimental
 
 ARG BASE_IMAGE=uniffle-base:latest
 FROM ${BASE_IMAGE}
@@ -24,6 +9,7 @@ ARG RSS_VERSION
 ARG AUTHOR=unknown
 ARG GIT_BRANCH=unknown
 ARG GIT_COMMIT=unknown
+ARG HADOOP_FILE=hops-$HADOOP_VERSION.tgz
 
 LABEL author=${AUTHOR}
 LABEL git-branch=${GIT_BRANCH}
@@ -44,10 +30,11 @@ COPY rss-env.sh /data/rssadmin/rss/bin
 
 COPY start.sh /data/rssadmin/rss/bin
 
-COPY hadoop-${HADOOP_VERSION}.tar.gz /data/rssadmin
-RUN tar -zxvf /data/rssadmin/hadoop-${HADOOP_VERSION}.tar.gz -C /data/rssadmin
-RUN mv /data/rssadmin/hadoop-${HADOOP_VERSION} /data/rssadmin/hadoop
-RUN rm -rf /data/rssadmin/hadoop-${HADOOP_VERSION}.tar.gz
+COPY $HADOOP_FILE /data/rssadmin
+RUN mkdir -p /data/rssadmin/hops-${HADOOP_VERSION}
+RUN tar -zxvf /data/rssadmin/$HADOOP_FILE --strip-components=1 -C /data/rssadmin/hops-${HADOOP_VERSION}
+RUN mv /data/rssadmin/hops-${HADOOP_VERSION} /data/rssadmin/hadoop
+RUN rm -rf /data/rssadmin/$HADOOP_FILE
 COPY hadoopconfig/ /data/rssadmin/hadoop/etc/hadoop
 
 ENV RSS_VERSION ${RSS_VERSION}
