@@ -29,14 +29,14 @@ function exit_with_usage() {
   echo "+------------------------------------------------------------------------------------------------------+"
   echo "| ./build.sh [--hadoop-version <hadoop version>] [--registry <registry url>] [--author <author name>]  |"
   echo "|            [--base-os-distribution <os distribution>] [--base-image <base image url>]                |"
-  echo "|            [--push-image <true|false>] [--apache-mirror <apache mirror url>]                         |"
+  echo "|            [--push-image <true|false>] [--apache-mirror <apache mirror url>] [--nexus-user <nexus username>]
+                     [--nexus-password <nexus password>]  |"
   echo "+------------------------------------------------------------------------------------------------------+"
   exit 1
 }
 
 REGISTRY="docker.io/library"
-HADOOP_VERSION=2.8.5
-HADOOP_SHORT_VERSION=$(echo $HADOOP_VERSION | awk -F "." '{print $1"."$2}')
+HADOOP_VERSION=3.2.0.13-SNAPSHOT
 AUTHOR=$(whoami)
 # If you are based in China, you could pass --apache-mirror <a_mirror_url> when building this.
 APACHE_MIRROR="https://dlcdn.apache.org"
@@ -70,6 +70,14 @@ while (( "$#" )); do
       PUSH_IMAGE="$2"
       shift
       ;;
+    --nexus-user)
+      NEXUS_USER="$2"
+      shift
+      ;;
+    --nexus-password)
+      NEXUS_PASSWORD="$2"
+      shift
+      ;;
     --help)
       exit_with_usage
       ;;
@@ -92,6 +100,8 @@ while (( "$#" )); do
   shift
 done
 
+HADOOP_SHORT_VERSION=$(echo $HADOOP_VERSION | awk -F "." '{print $1"."$2}')
+
 if [ -z "$BASE_IMAGE" ]; then
   echo "start building base image: uniffle-base"
   docker build -t "uniffle-base:latest" \
@@ -101,14 +111,15 @@ else
   echo "using base image(${BASE_IMAGE}) to build rss server"
 fi
 
-
-HADOOP_FILE=hadoop-${HADOOP_VERSION}.tar.gz
-ARCHIVE_HADOOP_URL=https://archive.apache.org/dist/hadoop/core/hadoop-${HADOOP_VERSION}/${HADOOP_FILE}
-HADOOP_URL=${APACHE_MIRROR}/hadoop/core/hadoop-${HADOOP_VERSION}/${HADOOP_FILE}
-echo "HADOOP_URL is either ${HADOOP_URL} or ${ARCHIVE_HADOOP_URL}"
-if [ ! -e "$HADOOP_FILE" ]; \
-  then wget "${HADOOP_URL}" || wget "$ARCHIVE_HADOOP_URL"; \
-  else echo "${HADOOP_FILE} has been downloaded"; \
+HADOOP_FILE=hops-$HADOOP_VERSION.tgz
+if [ ! -e "$HADOOP_FILE" ]; then
+  if [[ -n "$NEXUS_USER" ]] && [[ -n "$NEXUS_PASSWORD" ]] ; then
+      wget --user $NEXUS_USER --password $NEXUS_PASSWORD https://nexus.hops.works/repository/hopshadoop/$HADOOP_FILE
+  else
+      wget https://repo.hops.works/master/$HADOOP_FILE
+  fi
+else
+  echo "${HADOOP_FILE} has been downloaded";
 fi
 
 RSS_DIR=../../..
@@ -126,10 +137,13 @@ cp "$RSS_DIR/$RSS_FILE" .
 
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 GIT_COMMIT=$(git describe --dirty --always --tags | sed 's/-/./g')
-echo "image version: ${IMAGE_VERSION:=$RSS_VERSION-$GIT_COMMIT}"
+IMAGE_VERSION=$(cat $RSS_DIR/version.txt | awk '{$1=$1; print}' | sed '/^$/d')
 IMAGE=$REGISTRY/rss-server:$IMAGE_VERSION
+echo "image version: ${IMAGE_VERSION}"
+IMAGE=$REGISTRY/rss:$IMAGE_VERSION
 echo "building image: $IMAGE"
-docker build --network=host -t "$IMAGE" \
+
+DOCKER_BUILDKIT=1 docker build --network=host -t "$IMAGE" \
              --build-arg RSS_VERSION="$RSS_VERSION" \
              --build-arg HADOOP_VERSION="$HADOOP_VERSION" \
              --build-arg HADOOP_SHORT_VERSION="$HADOOP_SHORT_VERSION" \
@@ -137,6 +151,7 @@ docker build --network=host -t "$IMAGE" \
              --build-arg GIT_COMMIT="$GIT_COMMIT" \
              --build-arg GIT_BRANCH="$GIT_BRANCH" \
              --build-arg BASE_IMAGE="$BASE_IMAGE" \
+             --build-arg HADOOP_FILE="$HADOOP_FILE" \
              -f Dockerfile --no-cache .
 
 if [ x"${PUSH_IMAGE}" == x"true" ]; then
