@@ -36,7 +36,7 @@ function exit_with_usage() {
 }
 
 REGISTRY="docker.io/library"
-HADOOP_VERSION=3.2.0.13-SNAPSHOT
+HADOOP_VERSION=3.2.0.15-EE-SNAPSHOT
 AUTHOR=$(whoami)
 # If you are based in China, you could pass --apache-mirror <a_mirror_url> when building this.
 APACHE_MIRROR="https://dlcdn.apache.org"
@@ -140,7 +140,7 @@ GIT_COMMIT=$(git describe --dirty --always --tags | sed 's/-/./g')
 IMAGE_VERSION=$(cat $RSS_DIR/version.txt | awk '{$1=$1; print}' | sed '/^$/d')
 IMAGE=$REGISTRY/rss-server:$IMAGE_VERSION
 echo "image version: ${IMAGE_VERSION}"
-IMAGE=$REGISTRY/rss:$IMAGE_VERSION
+IMAGE=$REGISTRY/hopsworks/rss:$IMAGE_VERSION
 echo "building image: $IMAGE"
 
 DOCKER_BUILDKIT=1 docker build --network=host -t "$IMAGE" \
