@@ -18,6 +18,7 @@ LABEL git-commit=${GIT_COMMIT}
 RUN useradd -ms /bin/bash rssadmin
 RUN mkdir -p /data/rssadmin/
 RUN chown -R rssadmin:rssadmin /data
+RUN chmod -R 777 /data
 USER rssadmin
 
 COPY rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz /data/rssadmin
@@ -26,9 +27,12 @@ RUN mv /data/rssadmin/rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION} /data/rss
 RUN rm /data/rssadmin/rss/bin/rss-env.sh
 RUN rm -rf /data/rssadmin/rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz
 
-COPY rss-env.sh /data/rssadmin/rss/bin
 
-COPY start.sh /data/rssadmin/rss/bin
+RUN chmod -R 777 /data/rssadmin/rss
+
+COPY --chmod=755 rss-env.sh /data/rssadmin/rss/bin
+
+COPY --chmod=755 start.sh /data/rssadmin/rss/bin
 
 COPY $HADOOP_FILE /data/rssadmin
 RUN mkdir -p /data/rssadmin/hops-${HADOOP_VERSION}
@@ -38,7 +42,6 @@ RUN rm -rf /data/rssadmin/$HADOOP_FILE
 COPY hadoopconfig/ /data/rssadmin/hadoop/etc/hadoop
 
 ENV RSS_VERSION ${RSS_VERSION}
-ENV HADOOP_VERSION ${HADOOP_VERSION}
 
 WORKDIR /data/rssadmin
 CMD ["bash", "/data/rssadmin/rss/bin/start.sh"]
