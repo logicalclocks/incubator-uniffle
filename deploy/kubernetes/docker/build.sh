@@ -138,7 +138,6 @@ cp "$RSS_DIR/$RSS_FILE" .
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 GIT_COMMIT=$(git describe --dirty --always --tags | sed 's/-/./g')
 IMAGE_VERSION=$(cat $RSS_DIR/version.txt | awk '{$1=$1; print}' | sed '/^$/d')
-IMAGE=$REGISTRY/rss-server:$IMAGE_VERSION
 echo "image version: ${IMAGE_VERSION}"
 IMAGE=$REGISTRY/rss:$IMAGE_VERSION
 echo "building image: $IMAGE"
