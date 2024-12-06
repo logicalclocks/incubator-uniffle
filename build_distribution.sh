@@ -39,7 +39,9 @@ function exit_with_usage() {
   echo "|                         [--spark3-profile <spark3 profile id>] [--spark3-mvn <custom maven options>] |"
   echo "|                         [--hadoop-profile <hadoop profile id>] [--without-mr] [--without-tez]        |"
   echo "|                         [--without-spark] [--without-spark2] [--without-spark3] [--without-dashboard]|"
-  echo "|                         [--name <custom name>]                                                       |"
+  echo "|                         [--name <custom name> ]
+
+    |"
   echo "|                         <maven build options>                                                        |"
   echo "+------------------------------------------------------------------------------------------------------+"
   exit 1

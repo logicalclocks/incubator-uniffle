@@ -55,3 +55,8 @@ if [ "$SERVICE_NAME" == "server" ];then
         fi
     done
 fi
+
+if [ "$SERVICE_NAME" == "dashboard" ]; then
+    bash ${basedir}/bin/start-dashboard.sh
+fi
+

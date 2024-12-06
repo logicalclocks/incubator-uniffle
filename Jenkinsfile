@@ -31,7 +31,7 @@ pipeline {
                     echo "Building RSS version ${VERSION} on branch ${BUILD_BRANCH}"
                     docker login -u ${NEXUS_CREDS_USR} -p ${NEXUS_CREDS_PSW} $DOCKER_REGISTRY
 
-                    ./build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-dashboard
+                    ./build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
                     cd deploy/kubernetes/docker ||  exit
                     ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $DOCKER_REGISTRY --nexus-user $NEXUS_CREDS_USR --nexus-password $NEXUS_CREDS_PSW
                     cd ../../..
