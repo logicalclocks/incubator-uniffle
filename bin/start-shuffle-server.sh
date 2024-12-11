@@ -144,7 +144,7 @@ else
   GC_ARGS=$GC_LOG_ARGS_NEW
 fi
 
-$RUNNER $ARGS $JVM_ARGS $GC_ARGS $JAVA_LIB_PATH -cp $CLASSPATH $MAIN_CLASS --conf "$SHUFFLE_SERVER_CONF_FILE" $@ &
+$RUNNER $ARGS $JVM_ARGS $GC_ARGS $JAVA_LIB_PATH -cp $CLASSPATH $MAIN_CLASS --conf "$SHUFFLE_SERVER_CONF_FILE" $@ 2>&1 &
 
 get_pid_file_name shuffle-server
 echo $! >${RSS_PID_DIR}/${pid_file}

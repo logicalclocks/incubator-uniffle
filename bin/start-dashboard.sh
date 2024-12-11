@@ -79,7 +79,7 @@ else
   exit 1
 fi
 
-$RUNNER $ARGS $JVM_ARGS $JAVA11_EXTRA_ARGS -cp $CLASSPATH $MAIN_CLASS --conf "$DASHBOARD_CONF_FILE" $@ &
+$RUNNER $ARGS $JVM_ARGS $JAVA11_EXTRA_ARGS -cp $CLASSPATH $MAIN_CLASS --conf "$DASHBOARD_CONF_FILE" $@ 2>&1 &
 
 get_pid_file_name dashboard
 echo $! >${RSS_PID_DIR}/${pid_file}

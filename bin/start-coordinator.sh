@@ -107,7 +107,7 @@ else
   GC_ARGS=$GC_LOG_ARGS_NEW
 fi
 
-$RUNNER $ARGS $JVM_ARGS $GC_ARGS -cp $CLASSPATH $MAIN_CLASS --conf "$COORDINATOR_CONF_FILE" $@ &
+$RUNNER $ARGS $JVM_ARGS $GC_ARGS -cp $CLASSPATH $MAIN_CLASS --conf "$COORDINATOR_CONF_FILE" $@ 2>&1 &
 
 get_pid_file_name coordinator
 echo $! >${RSS_PID_DIR}/${pid_file}
