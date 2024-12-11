@@ -58,5 +58,14 @@ fi
 
 if [ "$SERVICE_NAME" == "dashboard" ]; then
     bash ${basedir}/bin/start-dashboard.sh
+    while : ; do
+        pid=$(lsof -i:"$DASHBOARD_PORT" -sTCP:LISTEN)
+        if [ "$pid" = "" ]; then
+          break
+        else
+          echo "dashboard pid:$pid is alive"
+          sleep 10
+        fi
+    done
 fi
 
