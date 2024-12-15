@@ -8,6 +8,7 @@ pipeline {
         DOCKER_REGISTRY = "docker.hops.works"
         CONTROLLER_IMAGE = "${DOCKER_REGISTRY}/hopsworks/rss-controller:${VERSION}"
         WEBHOOK_IMAGE = "${DOCKER_REGISTRY}/hopsworks/rss-webhook:${VERSION}"
+        UNIFFLE_VERSION = "0.10.0-SNAPSHOT"
     }
     stages {
         stage("checkout") {
@@ -31,13 +32,15 @@ pipeline {
                     echo "Building RSS version ${VERSION} on branch ${BUILD_BRANCH}"
                     docker login -u ${NEXUS_CREDS_USR} -p ${NEXUS_CREDS_PSW} $DOCKER_REGISTRY
 
-                    ./build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
+                    docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  openjdk:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
+
+                    #./build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
                     cd deploy/kubernetes/docker ||  exit
                     ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $DOCKER_REGISTRY --nexus-user $NEXUS_CREDS_USR --nexus-password $NEXUS_CREDS_PSW
                     cd ../../..
 
                     mkdir -p /opt/repository/master/rss/${VERSION}/
-                    cp  client-spark/spark3-shaded/target/rss-client-spark3-shaded-${VERSION}.jar /opt/repository/master/rss/${VERSION}/
+                    cp  client-spark/spark3-shaded/target/rss-client-spark3-shaded-${UNIFFLE_VERSION}.jar /opt/repository/master/rss/${VERSION}/rss-client-spark3-shaded-${VERSION}.jar
 
                     # build the controller and webhook images
                     cd deploy/kubernetes/operator ||  exit 1

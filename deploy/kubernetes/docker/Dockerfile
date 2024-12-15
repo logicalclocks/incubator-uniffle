@@ -21,13 +21,13 @@ RUN chown -R rssadmin:rssadmin /data
 RUN chmod -R 777 /data
 USER rssadmin
 
-COPY rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz /data/rssadmin
-RUN tar -xvf /data/rssadmin/rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz -C /data/rssadmin
+COPY --chown=rssadmin:rssadmin rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz /data/rssadmin
+RUN tar --no-same-owner -xvf /data/rssadmin/rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz -C /data/rssadmin
 RUN mv /data/rssadmin/rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION} /data/rssadmin/rss
 RUN rm /data/rssadmin/rss/conf/rss-env.sh
 RUN rm -rf /data/rssadmin/rss-${RSS_VERSION}-hadoop${HADOOP_SHORT_VERSION}.tgz
 
-COPY rss-env.sh /data/rssadmin/rss/conf
+COPY --chown=rssadmin:rssadmin rss-env.sh /data/rssadmin/rss/conf
 
 RUN chmod -R 777 /data/rssadmin/rss
 
@@ -35,12 +35,12 @@ COPY --chmod=755 rss-env.sh /data/rssadmin/rss/bin
 
 COPY --chmod=755 start.sh /data/rssadmin/rss/bin
 
-COPY $HADOOP_FILE /data/rssadmin
+COPY --chown=rssadmin:rssadmin $HADOOP_FILE /data/rssadmin
 RUN mkdir -p /data/rssadmin/hops-${HADOOP_VERSION}
-RUN tar -zxvf /data/rssadmin/$HADOOP_FILE --strip-components=1 -C /data/rssadmin/hops-${HADOOP_VERSION}
+RUN tar --no-same-owner -zxvf /data/rssadmin/$HADOOP_FILE --strip-components=1 -C /data/rssadmin/hops-${HADOOP_VERSION}
 RUN mv /data/rssadmin/hops-${HADOOP_VERSION} /data/rssadmin/hadoop
 RUN rm -rf /data/rssadmin/$HADOOP_FILE
-COPY hadoopconfig/ /data/rssadmin/hadoop/etc/hadoop
+COPY --chown=rssadmin:rssadmin hadoopconfig/ /data/rssadmin/hadoop/etc/hadoop
 
 ENV RSS_VERSION ${RSS_VERSION}
 

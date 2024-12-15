@@ -30,12 +30,20 @@ if [ "$SERVICE_NAME" == "coordinator" ];then
 
     bash ${basedir}/bin/start-coordinator.sh &
     sleep 10
+    max_retries=20
+    retries=0
     while : ; do
         pid=$(lsof -i:"${COORDINATOR_RPC_PORT}" -sTCP:LISTEN)
         if [ "$pid" = "" ]; then
-          break
+          retries=$((retries+1))
+          if [ $retries -gt $max_retries ]; then
+            break
+          fi
+          echo "coordinator  is not alive"
+          sleep 6
         else
           echo "coordinator pid:$pid is alive"
+          retries=0
           sleep 10
         fi
     done
@@ -45,12 +53,20 @@ if [ "$SERVICE_NAME" == "server" ];then
 
     bash ${basedir}/bin/start-shuffle-server.sh &
     sleep 10
+    max_retries=20
+    retries=0
     while : ; do
         pid=$(lsof -i:"$SERVER_RPC_PORT" -sTCP:LISTEN)
         if [ "$pid" = "" ]; then
-          break
+          retries=$((retries+1))
+          if [ $retries -gt $max_retries ]; then
+            break
+          fi
+          echo "shuffle server is not alive"
+          sleep 6
         else
           echo "shuffle server pid:$pid is alive"
+          retries=0
           sleep 10
         fi
     done
@@ -58,12 +74,21 @@ fi
 
 if [ "$SERVICE_NAME" == "dashboard" ]; then
     bash ${basedir}/bin/start-dashboard.sh
+    sleep 10
+    max_retries=20
+    retries=0
     while : ; do
         pid=$(lsof -i:"$DASHBOARD_PORT" -sTCP:LISTEN)
         if [ "$pid" = "" ]; then
-          break
+          retries=$((retries+1))
+          if [ $retries -gt $max_retries ]; then
+            break
+          fi
+          echo "dashboard is not alive"
+          sleep 6
         else
           echo "dashboard pid:$pid is alive"
+          retries=0
           sleep 10
         fi
     done
