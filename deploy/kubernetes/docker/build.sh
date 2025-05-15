@@ -36,7 +36,7 @@ function exit_with_usage() {
 }
 
 REGISTRY="docker.io/library"
-HADOOP_VERSION=3.2.0.15-EE-SNAPSHOT
+HADOOP_VERSION=3.2.0.16-EE-RC0
 AUTHOR=$(whoami)
 # If you are based in China, you could pass --apache-mirror <a_mirror_url> when building this.
 APACHE_MIRROR="https://dlcdn.apache.org"

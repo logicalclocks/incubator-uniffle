@@ -33,7 +33,7 @@ pipeline {
 
                     ./build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-dashboard
                     cd deploy/kubernetes/docker ||  exit
-                    ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $DOCKER_REGISTRY --nexus-user $NEXUS_CREDS_USR --nexus-password $NEXUS_CREDS_PSW
+                    ./build.sh --hadoop-version 3.2.0.16-EE-RC0 --registry $DOCKER_REGISTRY --nexus-user $NEXUS_CREDS_USR --nexus-password $NEXUS_CREDS_PSW
                     cd ../../..
 
                     mkdir -p /opt/repository/master/rss/${VERSION}/
