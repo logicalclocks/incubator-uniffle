@@ -1,57 +1,39 @@
-pipeline {
-    agent {
-        label "local"
+node("local") {
+  def dockerRegistry = 'n59k7749.c1.de1.container-registry.ovh.net'
+  def buildBranch = readFile "${env.WORKSPACE}/build_branch.txt"
+  def version = readFile "${env.WORKSPACE}/version.txt"
+  def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version.trim()}"
+  def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version.trim()}"
+  def uniffleVersion = "0.10.1"
+
+  stage('Clone repository') {
+      checkout scm
+  }
+
+  stage('Build and push images to registry') {
+
+    withCredentials([usernamePassword(credentialsId: 'a0770738-4ef3-4acc-a6ba-097ee6c85b44', passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
+      sh """
+        set -ex
+        docker login -u ${USERNAME} -p ${PASSWORD} $dockerRegistry
+
+        docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  openjdk:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3.5 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
+
+        cd deploy/kubernetes/docker ||  exit
+        ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
+        cd ../../..
+
+        mkdir -p /opt/repository/master/rss/$version/
+        cp  client-spark/spark3-shaded/target/rss-client-spark3-shaded-${uniffleVersion}.jar /opt/repository/master/rss/${version}/rss-client-spark3-shaded-${version}.jar
+
+        # build the controller and webhook images
+        cd deploy/kubernetes/operator ||  exit 1
+        docker build . --progress=plain -t $controllerImage --build-arg MODULE=controller -f hack/Dockerfile
+        docker build . --progress=plain -t $webhookImage --build-arg MODULE=webhook -f hack/Dockerfile
+        # push the controller and webhook images
+        docker push $controllerImage
+        docker push $webhookImage
+      """
     }
-    environment {
-        VERSION = readFile "${env.WORKSPACE}/version.txt"
-        BUILD_BRANCH = readFile "${env.WORKSPACE}/build_branch.txt"
-        DOCKER_REGISTRY = "docker.hops.works"
-        CONTROLLER_IMAGE = "${DOCKER_REGISTRY}/hopsworks/rss-controller:${VERSION}"
-        WEBHOOK_IMAGE = "${DOCKER_REGISTRY}/hopsworks/rss-webhook:${VERSION}"
-        UNIFFLE_VERSION = "0.10.0-SNAPSHOT"
-    }
-    stages {
-        stage("checkout") {
-            steps {
-                sh """
-                    set -ex
-                    git fetch --all
-                    git checkout ${BUILD_BRANCH}
-                    git reset --hard origin/${BUILD_BRANCH}
-                """
-            }
-        }
-        stage("build and publish") {
-            agent {
-                label "local"
-            }
-            steps {
-             withCredentials([usernamePassword(credentialsId: 'cred', passwordVariable: 'NEXUS_CREDS_PSW', usernameVariable: 'NEXUS_CREDS_USR')]) {
-                sh """
-                    set -ex
-                    echo "Building RSS version ${VERSION} on branch ${BUILD_BRANCH}"
-                    docker login -u ${NEXUS_CREDS_USR} -p ${NEXUS_CREDS_PSW} $DOCKER_REGISTRY
-
-                    docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  openjdk:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
-
-                    #./build_distribution.sh --spark3-profile spark3 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
-                    cd deploy/kubernetes/docker ||  exit
-                    ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $DOCKER_REGISTRY --nexus-user $NEXUS_CREDS_USR --nexus-password $NEXUS_CREDS_PSW
-                    cd ../../..
-
-                    mkdir -p /opt/repository/master/rss/${VERSION}/
-                    cp  client-spark/spark3-shaded/target/rss-client-spark3-shaded-${UNIFFLE_VERSION}.jar /opt/repository/master/rss/${VERSION}/rss-client-spark3-shaded-${VERSION}.jar
-
-                    # build the controller and webhook images
-                    cd deploy/kubernetes/operator ||  exit 1
-                    docker build . --progress=plain -t $CONTROLLER_IMAGE --build-arg MODULE=controller -f hack/Dockerfile
-                    docker build . --progress=plain -t $WEBHOOK_IMAGE --build-arg MODULE=webhook -f hack/Dockerfile
-                    # push the controller and webhook images
-                    docker push $CONTROLLER_IMAGE
-                    docker push $WEBHOOK_IMAGE
-                """
-             }
-            }
-        }
-    }
+  }
 }
