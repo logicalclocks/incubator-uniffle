@@ -14,6 +14,7 @@ node("local") {
     withCredentials([usernamePassword(credentialsId: 'a0770738-4ef3-4acc-a6ba-097ee6c85b44', passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
       sh """
         set -ex
+        git status
         docker login -u ${USERNAME} -p ${PASSWORD} $dockerRegistry
 
         docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  openjdk:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3.5 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
