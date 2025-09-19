@@ -1,10 +1,9 @@
 node("local") {
   def dockerRegistry = 'n59k7749.c1.de1.container-registry.ovh.net'
-  def buildBranch = readFile "${env.WORKSPACE}/build_branch.txt"
   def version = readFile "${env.WORKSPACE}/version.txt"
   def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version.trim()}"
   def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version.trim()}"
-  def uniffleVersion = "0.10.1"
+  def uniffleVersion = "0.10.1-SNAPSHOT"
 
   stage('Clone repository') {
       checkout scm
@@ -15,6 +14,7 @@ node("local") {
     withCredentials([usernamePassword(credentialsId: 'a0770738-4ef3-4acc-a6ba-097ee6c85b44', passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
       sh """
         set -ex
+        git status
         docker login -u ${USERNAME} -p ${PASSWORD} $dockerRegistry
 
         docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  openjdk:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3.5 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
