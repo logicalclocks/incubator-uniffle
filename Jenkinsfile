@@ -1,10 +1,9 @@
 node("local") {
   def dockerRegistry = 'n59k7749.c1.de1.container-registry.ovh.net'
-  def buildBranch = readFile "${env.WORKSPACE}/build_branch.txt"
   def version = readFile "${env.WORKSPACE}/version.txt"
   def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version.trim()}"
   def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version.trim()}"
-  def uniffleVersion = "0.10.1"
+  def uniffleVersion = "0.10.1-SNAPSHOT"
 
   stage('Clone repository') {
       checkout scm
