@@ -3,7 +3,7 @@ node("local") {
   def version = readFile "${env.WORKSPACE}/version.txt"
   def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version.trim()}"
   def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version.trim()}"
-  def uniffleVersion = "0.10.1-SNAPSHOT"
+  def uniffleVersion = "0.10.1"
 
   stage('Clone repository') {
       checkout scm
