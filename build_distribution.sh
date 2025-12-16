@@ -122,6 +122,15 @@ while (( "$#" )); do
   shift
 done
 
+echo "Installing git"
+
+apt update
+apt install -y git
+
+# Git sets a security requirement that the user running git should match the owner of the files
+# For building it is fine to set an exception
+git config --global --add safe.directory /incubator-uniffle
+
 cd $RSS_HOME
 
 if [ $(command -v git) ]; then
