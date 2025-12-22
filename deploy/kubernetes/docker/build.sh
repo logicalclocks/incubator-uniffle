@@ -122,8 +122,6 @@ if [ ! -e "$HADOOP_FILE" ]; then
 else
   echo "${HADOOP_FILE} has been downloaded";
 fi
-NEXUS_USER=gibson
-NEXUS_PASSWORD=Humility/LC/1
 RSS_DIR=../../..
 cd $RSS_DIR || exit
 RSS_VERSION=$(./mvnw help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | grep -v "WARNING" | tail -n 1)
