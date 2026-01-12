@@ -36,7 +36,7 @@ COPY pkg/ pkg/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o ${MODULE} cmd/${MODULE}/main.go
 
 
-FROM debian:12.6-slim
+FROM debian:13-slim
 # docker's ARG scope doc: https://docs.docker.com/engine/reference/builder/#scope, it's required to declear an arg in
 # each stage.
 ARG MODULE
