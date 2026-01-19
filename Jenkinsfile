@@ -13,12 +13,7 @@ pipeline {
     stages {
         stage("checkout") {
             steps {
-                sh """
-                    set -ex
-                    git fetch --all
-                    git checkout ${BUILD_BRANCH}
-                    git reset --hard origin/${BUILD_BRANCH}
-                """
+                checkout scm
             }
         }
         stage("build and publish") {
