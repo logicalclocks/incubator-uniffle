@@ -47,17 +47,18 @@ type ConfigSyncer interface {
 
 // NewConfigSyncer creates a ConfigSyncer.
 func NewConfigSyncer(caCert []byte, externalService string,
-	kubeClient kubernetes.Interface) ConfigSyncer {
-	return newConfigSyncer(caCert, externalService, kubeClient)
+	kubeClient kubernetes.Interface, webhookName string) ConfigSyncer {
+	return newConfigSyncer(caCert, externalService, kubeClient, webhookName)
 }
 
 // newConfigSyncer creates a configSyncer.
 func newConfigSyncer(caCert []byte, externalService string,
-	kubeClient kubernetes.Interface) *configSyncer {
+	kubeClient kubernetes.Interface, webhookName string) *configSyncer {
 	return &configSyncer{
 		caCert:          caCert,
 		externalService: externalService,
 		kubeClient:      kubeClient,
+		webhookName:     webhookName,
 	}
 }
 
@@ -66,6 +67,7 @@ type configSyncer struct {
 	caCert          []byte
 	externalService string
 	kubeClient      kubernetes.Interface
+	webhookName     string
 }
 
 // Start starts the ConfigSyncer.
@@ -102,7 +104,7 @@ func (cs *configSyncer) syncWebhookCfg() error {
 func (cs *configSyncer) syncValidatingWebhookCfg(
 	currentVWC *admissionv1.ValidatingWebhookConfiguration) error {
 	vwc, err := cs.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
-		Get(context.Background(), webhookconstants.ComponentName, metav1.GetOptions{})
+		Get(context.Background(), cs.webhookName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = cs.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
@@ -123,7 +125,7 @@ func (cs *configSyncer) syncValidatingWebhookCfg(
 func (cs *configSyncer) syncMutatingWebhookCfg(
 	currentMWC *admissionv1.MutatingWebhookConfiguration) error {
 	vwc, err := cs.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().
-		Get(context.Background(), webhookconstants.ComponentName, metav1.GetOptions{})
+		Get(context.Background(), cs.webhookName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = cs.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().
@@ -147,12 +149,12 @@ func (cs *configSyncer) generateWebhookCfg() (
 	mutatingWebhooks := cs.generateMutatingWebhooks()
 	return &admissionv1.ValidatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: webhookconstants.ComponentName,
+				Name: cs.webhookName,
 			},
 			Webhooks: validatingWebhooks,
 		}, &admissionv1.MutatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: webhookconstants.ComponentName,
+				Name: cs.webhookName,
 			},
 			Webhooks: mutatingWebhooks,
 		}

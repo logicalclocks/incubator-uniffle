@@ -39,6 +39,7 @@ const (
 	flagServerPrivateKeyFile = "server-private-key-file"
 	flagCACertFile           = "ca-cert-file"
 	flagLeaderElection       = "leader-election"
+	flagWebhookName          = "webhook-name"
 )
 
 // Config contains all configurations.
@@ -46,6 +47,7 @@ type Config struct {
 	IgnoreLastApps bool
 	IgnoreRSS      bool
 	LeaderElection bool
+	WebhookName    string
 	HTTPConfig
 	utils.GenericConfig
 }
@@ -106,7 +108,7 @@ func (c *HTTPConfig) GetCaCert() []byte {
 
 // LeaderElectionID returns leader election ID.
 func (c *Config) LeaderElectionID() string {
-	return "rss-webhook-" + constants.LeaderIDSuffix
+	return fmt.Sprintf("%s-%s", c.WebhookName, constants.LeaderIDSuffix)
 }
 
 // AddFlags adds all configurations to the global flags.
@@ -116,6 +118,9 @@ func (c *Config) AddFlags() {
 	flag.BoolVar(&c.IgnoreRSS, flagIgnoreRSS, false,
 		"Used when debugging, it means we will ignore checking rss objects.")
 	flag.BoolVar(&c.LeaderElection, flagLeaderElection, false, "whether we need to enable leader election.")
+	flag.StringVar(&c.WebhookName, flagWebhookName, webhookconstants.ComponentName,
+		"Name of the MutatingWebhookConfiguration and ValidatingWebhookConfiguration resources. "+
+			"Override when running multiple instances on the same cluster to avoid name collisions.")
 	c.HTTPConfig.AddFlags()
 	c.GenericConfig.AddFlags()
 }

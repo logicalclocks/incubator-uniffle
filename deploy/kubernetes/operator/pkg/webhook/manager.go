@@ -34,7 +34,6 @@ import (
 
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/utils"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/config"
-	webhookconstants "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/constants"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/inspector"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/syncer"
 )
@@ -61,6 +60,7 @@ func NewAdmissionManager(cfg *config.Config) AdmissionManager {
 func newAdmissionManager(cfg *config.Config) *admissionManager {
 	am := &admissionManager{
 		externalService: cfg.ExternalService,
+		webhookName:     cfg.WebhookName,
 		kubeClient:      cfg.KubeClient,
 	}
 	if !cfg.NeedLoadCertsFromSecret() {
@@ -81,7 +81,7 @@ func newAdmissionManager(cfg *config.Config) *admissionManager {
 		klog.Fatalf("build manager for admission manager failed: %v", err)
 	}
 	am.mgr = mgr
-	am.syncer = syncer.NewConfigSyncer(am.caCertBody, cfg.ExternalService, cfg.KubeClient)
+	am.syncer = syncer.NewConfigSyncer(am.caCertBody, cfg.ExternalService, cfg.KubeClient, cfg.WebhookName)
 	am.inspector = inspector.NewInspector(cfg, am.tlsConfig)
 	return am
 }
@@ -89,6 +89,7 @@ func newAdmissionManager(cfg *config.Config) *admissionManager {
 // admissionManager implements the AdmissionManager interface.
 type admissionManager struct {
 	externalService string
+	webhookName     string
 	caCertBody      []byte
 	tlsConfig       *tls.Config
 
@@ -132,7 +133,7 @@ func (am *admissionManager) generateCerts(create bool) (
 		klog.Errorf("set up ca key failed %v", err)
 		return nil, nil, nil, err
 	}
-	caCertificate, err = utils.SetUpCaCert(webhookconstants.ComponentName, caPrivateKey)
+	caCertificate, err = utils.SetUpCaCert(am.webhookName, caPrivateKey)
 	if err != nil {
 		klog.Errorf("set up ca cert failed %v", err)
 		return nil, nil, nil, err
@@ -140,7 +141,7 @@ func (am *admissionManager) generateCerts(create bool) (
 	namespace := utils.GetCurrentNamespace()
 	domains, ips := subjectAltNames(namespace, am.externalService)
 	serverCertificate, serverPrivateKey, err = utils.SetUpSignedCertAndKey(domains, ips,
-		webhookconstants.ComponentName,
+		am.webhookName,
 		caPrivateKey, caCertificate, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
 	if err != nil {
 		klog.Errorf("set up server cert error %v", err)
