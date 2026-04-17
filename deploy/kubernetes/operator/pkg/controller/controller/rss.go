@@ -50,6 +50,7 @@ import (
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/sync/coordinator"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/sync/shuffleserver"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/util"
+	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/filter"
 	kubeutil "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/util/kubernetes"
 	propertiestutil "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/util/properties"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/generated/clientset/versioned"
@@ -79,6 +80,7 @@ func NewRSSController(cfg *config.Config) RSSController {
 func newRSSController(cfg *config.Config) *rssController {
 	rc := &rssController{
 		workers:                      cfg.Workers,
+		namespaceFilter:              filter.NewNamespaceFilter(cfg.KubeClient, cfg.NamespaceSelector),
 		kubeClient:                   cfg.KubeClient,
 		rssClient:                    cfg.RSSClient,
 		rssInformerFactory:           externalversions.NewSharedInformerFactory(cfg.RSSClient, 0),
@@ -121,6 +123,7 @@ func newRSSController(cfg *config.Config) *rssController {
 // rssController implements the RSSController interface.
 type rssController struct {
 	workers                      int
+	namespaceFilter              *filter.NamespaceFilter
 	kubeClient                   kubernetes.Interface
 	rssClient                    versioned.Interface
 	rssInformerFactory           externalversions.SharedInformerFactory
@@ -143,11 +146,12 @@ type rssController struct {
 // Start starts the RSSController.
 func (r *rssController) Start(ctx context.Context) error {
 	klog.V(2).Infof("%v is starting", controllerName)
+	r.namespaceFilter.Start(ctx.Done())
 	r.rssInformerFactory.Start(ctx.Done())
 	r.shuffleServerInformerFactory.Start(ctx.Done())
 	r.coordinatorInformerFactory.Start(ctx.Done())
-	if !cache.WaitForCacheSync(ctx.Done(), r.rssInformer.HasSynced, r.stsInformer.HasSynced,
-		r.podInformer.HasSynced, r.cmInformer.HasSynced) {
+	if !cache.WaitForCacheSync(ctx.Done(), r.namespaceFilter.HasSynced, r.rssInformer.HasSynced,
+		r.stsInformer.HasSynced, r.podInformer.HasSynced, r.cmInformer.HasSynced) {
 		return fmt.Errorf("wait for cache synced failed")
 	}
 	klog.V(2).Infof("%v started", controllerName)
@@ -728,6 +732,10 @@ func (r *rssController) enqueueRss(obj interface{}) {
 		klog.Errorf("object is not a rss: %+v", obj)
 		return
 	}
+	if !r.namespaceFilter.Matches(rss.Namespace) {
+		klog.V(5).Infof("skipping rss %v/%v: namespace does not match selector", rss.Namespace, rss.Name)
+		return
+	}
 
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(rss)
 	if err != nil {
@@ -750,6 +758,10 @@ func (r *rssController) enqueueShuffleServer(obj interface{}) {
 	}
 	if pod == nil {
 		klog.Errorf("object is not a Pod object: %+v", obj)
+		return
+	}
+	if !r.namespaceFilter.Matches(pod.Namespace) {
+		klog.V(5).Infof("skipping shuffle server pod %v/%v: namespace does not match selector", pod.Namespace, pod.Name)
 		return
 	}
 	rssName := utils.GetRssNameByPod(pod)
