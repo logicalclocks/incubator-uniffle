@@ -40,14 +40,16 @@ const (
 	flagCACertFile           = "ca-cert-file"
 	flagLeaderElection       = "leader-election"
 	flagWebhookName          = "webhook-name"
+	flagNamespaceSelector    = "namespace-selector"
 )
 
 // Config contains all configurations.
 type Config struct {
-	IgnoreLastApps bool
-	IgnoreRSS      bool
-	LeaderElection bool
-	WebhookName    string
+	IgnoreLastApps    bool
+	IgnoreRSS         bool
+	LeaderElection    bool
+	WebhookName       string
+	NamespaceSelector string
 	HTTPConfig
 	utils.GenericConfig
 }
@@ -121,6 +123,10 @@ func (c *Config) AddFlags() {
 	flag.StringVar(&c.WebhookName, flagWebhookName, webhookconstants.ComponentName,
 		"Name of the MutatingWebhookConfiguration and ValidatingWebhookConfiguration resources. "+
 			"Override when running multiple instances on the same cluster to avoid name collisions.")
+	flag.StringVar(&c.NamespaceSelector, flagNamespaceSelector, "",
+		"Label selector (key=value) for namespaces this webhook should manage. "+
+			"Only admission requests from matching namespaces will be intercepted. "+
+			"If empty, all namespaces are managed.")
 	c.HTTPConfig.AddFlags()
 	c.GenericConfig.AddFlags()
 }

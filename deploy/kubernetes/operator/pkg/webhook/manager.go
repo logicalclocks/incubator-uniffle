@@ -23,6 +23,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -56,6 +57,25 @@ func NewAdmissionManager(cfg *config.Config) AdmissionManager {
 	return newAdmissionManager(cfg)
 }
 
+// parseNamespaceSelector parses a comma-separated "key1=value1,key2=value2" string
+// into a LabelSelector. Returns nil if the input is empty (no filtering).
+func parseNamespaceSelector(s string) *metav1.LabelSelector {
+	if s == "" {
+		return nil
+	}
+	matchLabels := make(map[string]string)
+	for _, pair := range strings.Split(s, ",") {
+		parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
+		if len(parts) != 2 || parts[0] == "" {
+			klog.Fatalf("invalid namespace-selector %q: each label must be in key=value format", s)
+		}
+		matchLabels[parts[0]] = parts[1]
+	}
+	return &metav1.LabelSelector{
+		MatchLabels: matchLabels,
+	}
+}
+
 // newAdmissionManager creates an admissionManager.
 func newAdmissionManager(cfg *config.Config) *admissionManager {
 	am := &admissionManager{
@@ -81,7 +101,8 @@ func newAdmissionManager(cfg *config.Config) *admissionManager {
 		klog.Fatalf("build manager for admission manager failed: %v", err)
 	}
 	am.mgr = mgr
-	am.syncer = syncer.NewConfigSyncer(am.caCertBody, cfg.ExternalService, cfg.KubeClient, cfg.WebhookName)
+	nsSelector := parseNamespaceSelector(cfg.NamespaceSelector)
+	am.syncer = syncer.NewConfigSyncer(am.caCertBody, cfg.ExternalService, cfg.KubeClient, cfg.WebhookName, nsSelector)
 	am.inspector = inspector.NewInspector(cfg, am.tlsConfig)
 	return am
 }

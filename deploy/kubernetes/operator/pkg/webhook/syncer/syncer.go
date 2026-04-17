@@ -47,27 +47,31 @@ type ConfigSyncer interface {
 
 // NewConfigSyncer creates a ConfigSyncer.
 func NewConfigSyncer(caCert []byte, externalService string,
-	kubeClient kubernetes.Interface, webhookName string) ConfigSyncer {
-	return newConfigSyncer(caCert, externalService, kubeClient, webhookName)
+	kubeClient kubernetes.Interface, webhookName string,
+	namespaceSelector *metav1.LabelSelector) ConfigSyncer {
+	return newConfigSyncer(caCert, externalService, kubeClient, webhookName, namespaceSelector)
 }
 
 // newConfigSyncer creates a configSyncer.
 func newConfigSyncer(caCert []byte, externalService string,
-	kubeClient kubernetes.Interface, webhookName string) *configSyncer {
+	kubeClient kubernetes.Interface, webhookName string,
+	namespaceSelector *metav1.LabelSelector) *configSyncer {
 	return &configSyncer{
-		caCert:          caCert,
-		externalService: externalService,
-		kubeClient:      kubeClient,
-		webhookName:     webhookName,
+		caCert:            caCert,
+		externalService:   externalService,
+		kubeClient:        kubeClient,
+		webhookName:       webhookName,
+		namespaceSelector: namespaceSelector,
 	}
 }
 
 // configSyncer implements the ConfigSyncer interface.
 type configSyncer struct {
-	caCert          []byte
-	externalService string
-	kubeClient      kubernetes.Interface
-	webhookName     string
+	caCert            []byte
+	externalService   string
+	kubeClient        kubernetes.Interface
+	webhookName       string
+	namespaceSelector *metav1.LabelSelector
 }
 
 // Start starts the ConfigSyncer.
@@ -186,6 +190,7 @@ func (cs *configSyncer) generateValidatingWebhooks() []admissionv1.ValidatingWeb
 					Path:      pointer.StringPtr(webhookconstants.ValidatingPodPath),
 				},
 			},
+			NamespaceSelector: cs.namespaceSelector,
 			ObjectSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					constants.LabelShuffleServer: "true",
@@ -207,6 +212,7 @@ func (cs *configSyncer) generateValidatingWebhooks() []admissionv1.ValidatingWeb
 					Path:      pointer.StringPtr(webhookconstants.ValidatingRssPath),
 				},
 			},
+			NamespaceSelector:       cs.namespaceSelector,
 			SideEffects:             &sideEffects,
 			AdmissionReviewVersions: []string{"v1", "v1beta1"},
 		},
@@ -230,6 +236,7 @@ func (cs *configSyncer) generateMutatingWebhooks() []admissionv1.MutatingWebhook
 					Path:      pointer.StringPtr(webhookconstants.MutatingRssPath),
 				},
 			},
+			NamespaceSelector:       cs.namespaceSelector,
 			SideEffects:             &sideEffects,
 			AdmissionReviewVersions: []string{"v1", "v1beta1"},
 		},
