@@ -124,7 +124,8 @@ func (c *Config) AddFlags() {
 		"Name of the MutatingWebhookConfiguration and ValidatingWebhookConfiguration resources. "+
 			"Override when running multiple instances on the same cluster to avoid name collisions.")
 	flag.StringVar(&c.NamespaceSelector, flagNamespaceSelector, "",
-		"Label selector (key=value) for namespaces this webhook should manage. "+
+		"Label selector (key=value,key2=value2) for namespaces this webhook should manage. "+
+			"Multiple labels can be provided as a comma-separated list."+
 			"Only admission requests from matching namespaces will be intercepted. "+
 			"If empty, all namespaces are managed.")
 	c.HTTPConfig.AddFlags()
