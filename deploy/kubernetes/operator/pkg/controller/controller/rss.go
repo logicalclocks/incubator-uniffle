@@ -47,10 +47,10 @@ import (
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/constants"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/config"
 	controllerconstants "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/constants"
+	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/filter"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/sync/coordinator"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/sync/shuffleserver"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/util"
-	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/filter"
 	kubeutil "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/util/kubernetes"
 	propertiestutil "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/controller/util/properties"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/generated/clientset/versioned"
@@ -147,10 +147,13 @@ type rssController struct {
 func (r *rssController) Start(ctx context.Context) error {
 	klog.V(2).Infof("%v is starting", controllerName)
 	r.namespaceFilter.Start(ctx.Done())
+	if !cache.WaitForCacheSync(ctx.Done(), r.namespaceFilter.HasSynced) {
+		return fmt.Errorf("wait for namespace filter cache synced failed")
+	}
 	r.rssInformerFactory.Start(ctx.Done())
 	r.shuffleServerInformerFactory.Start(ctx.Done())
 	r.coordinatorInformerFactory.Start(ctx.Done())
-	if !cache.WaitForCacheSync(ctx.Done(), r.namespaceFilter.HasSynced, r.rssInformer.HasSynced,
+	if !cache.WaitForCacheSync(ctx.Done(), r.rssInformer.HasSynced,
 		r.stsInformer.HasSynced, r.podInformer.HasSynced, r.cmInformer.HasSynced) {
 		return fmt.Errorf("wait for cache synced failed")
 	}
