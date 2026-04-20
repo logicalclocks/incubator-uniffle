@@ -31,6 +31,7 @@ import (
 
 const (
 	flagWorkers                    = "workers"
+	flagNamespaceSelector          = "namespace-selector"
 	managerLeaderElection          = "leader-election"
 	managerLeaderElectionID        = "leader-election-id"
 	managerLeaderElectionNamespace = "leader-election-namespace"
@@ -41,8 +42,9 @@ const (
 
 // Config contains all configurations.
 type Config struct {
-	Workers        int
-	ManagerOptions ctrl.Options
+	Workers           int
+	NamespaceSelector string
+	ManagerOptions    ctrl.Options
 	utils.GenericConfig
 }
 
@@ -56,6 +58,10 @@ func (c *Config) AddFlags() {
 	c.ManagerOptions.SyncPeriod = pointer.Duration(time.Hour * 10)
 	c.ManagerOptions.RetryPeriod = pointer.Duration(time.Second * 2)
 	flag.IntVar(&c.Workers, flagWorkers, 1, "Concurrency of the rss controller.")
+	flag.StringVar(&c.NamespaceSelector, flagNamespaceSelector, "",
+		"Label selector (key=value or key1=value1,key2=value2) for namespaces this controller should manage. "+
+			"Only events from matching namespaces will be processed. Namespaces are watched dynamically. "+
+			"If empty, all namespaces are managed.")
 	flag.BoolVar(&c.ManagerOptions.LeaderElection, managerLeaderElection, true, "LeaderElection determines whether or not to use leader election when starting the manager.")
 	flag.StringVar(&c.ManagerOptions.LeaderElectionID, managerLeaderElectionID, c.LeaderElectionID(), "LeaderElectionID determines the name of the resource that leader election will use for holding the leader lock.")
 	flag.StringVar(&c.ManagerOptions.LeaderElectionNamespace, managerLeaderElectionNamespace, utils.GetCurrentNamespace(), "LeaderElectionNamespace determines the namespace in which the leader election resource will be created.")

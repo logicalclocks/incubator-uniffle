@@ -23,6 +23,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,7 +35,6 @@ import (
 
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/utils"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/config"
-	webhookconstants "github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/constants"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/inspector"
 	"github.com/apache/incubator-uniffle/deploy/kubernetes/operator/pkg/webhook/syncer"
 )
@@ -57,10 +57,35 @@ func NewAdmissionManager(cfg *config.Config) AdmissionManager {
 	return newAdmissionManager(cfg)
 }
 
+// parseNamespaceSelector parses a comma-separated "key1=value1,key2=value2" string
+// into a LabelSelector. Returns nil if the input is empty (no filtering).
+func parseNamespaceSelector(s string) *metav1.LabelSelector {
+	if s == "" {
+		return nil
+	}
+	matchLabels := make(map[string]string)
+	for _, pair := range strings.Split(s, ",") {
+		parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
+		if len(parts) != 2 {
+			klog.Fatalf("invalid namespace-selector %q: each label must be in key=value format", s)
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" {
+			klog.Fatalf("invalid namespace-selector %q: each label must be in key=value format", s)
+		}
+		matchLabels[key] = value
+	}
+	return &metav1.LabelSelector{
+		MatchLabels: matchLabels,
+	}
+}
+
 // newAdmissionManager creates an admissionManager.
 func newAdmissionManager(cfg *config.Config) *admissionManager {
 	am := &admissionManager{
 		externalService: cfg.ExternalService,
+		webhookName:     cfg.WebhookName,
 		kubeClient:      cfg.KubeClient,
 	}
 	if !cfg.NeedLoadCertsFromSecret() {
@@ -81,7 +106,8 @@ func newAdmissionManager(cfg *config.Config) *admissionManager {
 		klog.Fatalf("build manager for admission manager failed: %v", err)
 	}
 	am.mgr = mgr
-	am.syncer = syncer.NewConfigSyncer(am.caCertBody, cfg.ExternalService, cfg.KubeClient)
+	nsSelector := parseNamespaceSelector(cfg.NamespaceSelector)
+	am.syncer = syncer.NewConfigSyncer(am.caCertBody, cfg.ExternalService, cfg.KubeClient, cfg.WebhookName, nsSelector)
 	am.inspector = inspector.NewInspector(cfg, am.tlsConfig)
 	return am
 }
@@ -89,6 +115,7 @@ func newAdmissionManager(cfg *config.Config) *admissionManager {
 // admissionManager implements the AdmissionManager interface.
 type admissionManager struct {
 	externalService string
+	webhookName     string
 	caCertBody      []byte
 	tlsConfig       *tls.Config
 
@@ -132,7 +159,7 @@ func (am *admissionManager) generateCerts(create bool) (
 		klog.Errorf("set up ca key failed %v", err)
 		return nil, nil, nil, err
 	}
-	caCertificate, err = utils.SetUpCaCert(webhookconstants.ComponentName, caPrivateKey)
+	caCertificate, err = utils.SetUpCaCert(am.webhookName, caPrivateKey)
 	if err != nil {
 		klog.Errorf("set up ca cert failed %v", err)
 		return nil, nil, nil, err
@@ -140,7 +167,7 @@ func (am *admissionManager) generateCerts(create bool) (
 	namespace := utils.GetCurrentNamespace()
 	domains, ips := subjectAltNames(namespace, am.externalService)
 	serverCertificate, serverPrivateKey, err = utils.SetUpSignedCertAndKey(domains, ips,
-		webhookconstants.ComponentName,
+		am.webhookName,
 		caPrivateKey, caCertificate, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
 	if err != nil {
 		klog.Errorf("set up server cert error %v", err)
