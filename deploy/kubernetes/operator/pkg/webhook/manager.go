@@ -66,10 +66,15 @@ func parseNamespaceSelector(s string) *metav1.LabelSelector {
 	matchLabels := make(map[string]string)
 	for _, pair := range strings.Split(s, ",") {
 		parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
-		if len(parts) != 2 || parts[0] == "" {
+		if len(parts) != 2 {
 			klog.Fatalf("invalid namespace-selector %q: each label must be in key=value format", s)
 		}
-		matchLabels[parts[0]] = parts[1]
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" {
+			klog.Fatalf("invalid namespace-selector %q: each label must be in key=value format", s)
+		}
+		matchLabels[key] = value
 	}
 	return &metav1.LabelSelector{
 		MatchLabels: matchLabels,
