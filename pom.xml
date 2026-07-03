@@ -151,6 +151,17 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>HopsEE</id>
+      <name>Hops Release Repository</name>
+      <url>https://nexus.hops.works/repository/hops-artifacts</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
   </repositories>
 
   <modules>
