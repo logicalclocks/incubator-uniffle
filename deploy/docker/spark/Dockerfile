@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-FROM apache/spark:3.5.0
+FROM apache/spark:4.1.0-java17
 
 ENV PATH="${PATH}:/opt/spark/bin"
 

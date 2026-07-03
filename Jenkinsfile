@@ -3,7 +3,7 @@ node("local") {
   def version = readFile("${env.WORKSPACE}/version.txt").trim()
   def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version.trim()}"
   def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version.trim()}"
-  def uniffleVersion = "0.10.1"
+  def uniffleVersion = "0.10.2"
 
   stage('Clone repository') {
       checkout scm
@@ -17,14 +17,14 @@ node("local") {
         git status
         docker login -u ${USERNAME} -p ${PASSWORD} $dockerRegistry
 
-        docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  eclipse-temurin:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3.5 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
+        docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  eclipse-temurin:17-jdk /bin/bash build_distribution.sh --spark4-profile spark4.1 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2 --without-spark3
 
         cd deploy/kubernetes/docker ||  exit
         ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
         cd ../../..
 
         mkdir -p /opt/repository/master/rss/$version/
-        cp  client-spark/spark3-shaded/target/rss-client-spark3-shaded-${uniffleVersion}.jar /opt/repository/master/rss/${version}/rss-client-spark3-shaded-${version}.jar
+        cp  client-spark/spark3-shaded/target/rss-client-spark3-shaded-${uniffleVersion}.jar /opt/repository/master/rss/${version}/rss-client-spark4-shaded-${version}.jar
 
         # build the controller and webhook images
         cd deploy/kubernetes/operator ||  exit 1

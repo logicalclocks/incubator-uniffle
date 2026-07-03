@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.writer;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -942,7 +943,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
                 DUMMY_PORT,
                 Option.apply(Long.toString(taskAttemptId)));
         MapStatus mapStatus =
-            MapStatus.apply(blockManagerId, partitionLengthStatistic.toArray(), taskAttemptId);
+            createMapStatus(blockManagerId, partitionLengthStatistic.toArray(), taskAttemptId);
         return Option.apply(mapStatus);
       } else {
         return Option.empty();
@@ -1085,5 +1086,26 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
 
   public TaskAttemptAssignment getTaskAttemptAssignment() {
     return taskAttemptAssignment;
+  }
+
+  private MapStatus createMapStatus(
+      BlockManagerId blockManagerId, long[] partitionLengths, long mapId) {
+    try {
+      for (Method method : MapStatus.class.getMethods()) {
+        if (!"apply".equals(method.getName())) {
+          continue;
+        }
+        if (method.getParameterCount() == 4) {
+          long checksumValue = (long) MapStatus.class.getMethod("apply$default$4").invoke(null);
+          return (MapStatus) method.invoke(null, blockManagerId, partitionLengths, mapId, checksumValue);
+        }
+        if (method.getParameterCount() == 3) {
+          return (MapStatus) method.invoke(null, blockManagerId, partitionLengths, mapId);
+        }
+      }
+      throw new NoSuchMethodException("No compatible MapStatus.apply method found");
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Failed to create MapStatus", e);
+    }
   }
 }

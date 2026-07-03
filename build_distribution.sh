@@ -37,8 +37,10 @@ function exit_with_usage() {
   echo "+------------------------------------------------------------------------------------------------------+"
   echo "| ./build_distribution.sh [--spark2-profile <spark2 profile id>] [--spark2-mvn <custom maven options>] |"
   echo "|                         [--spark3-profile <spark3 profile id>] [--spark3-mvn <custom maven options>] |"
+  echo "|                         [--spark4-profile <spark4 profile id>] [--spark4-mvn <custom maven options>] |"
   echo "|                         [--hadoop-profile <hadoop profile id>] [--without-mr] [--without-tez]        |"
-  echo "|                         [--without-spark] [--without-spark2] [--without-spark3] [--without-dashboard]|"
+  echo "|                         [--without-spark] [--without-spark2] [--without-spark3] [--without-spark4]   |"
+  echo "|                         [--without-dashboard]                                                        |"
   echo "|                         [--name <custom name> ]
 
     |"
@@ -51,12 +53,15 @@ SPARK2_PROFILE_ID="spark2"
 SPARK2_MVN_OPTS=""
 SPARK3_PROFILE_ID="spark3"
 SPARK3_MVN_OPTS=""
+SPARK4_PROFILE_ID="spark4.1"
+SPARK4_MVN_OPTS=""
 HADOOP_PROFILE_ID="hadoop2.8"
 WITH_MR="true"
 WITH_TEZ="true"
 WITH_SPARK="true"
 WITH_SPARK2="true"
 WITH_SPARK3="true"
+WITH_SPARK4="true"
 WITH_DASHBOARD="true"
 NAME=none
 while (( "$#" )); do
@@ -77,6 +82,14 @@ while (( "$#" )); do
       SPARK3_MVN_OPTS=$2
       shift
       ;;
+    --spark4-profile)
+      SPARK4_PROFILE_ID="$2"
+      shift
+      ;;
+    --spark4-mvn)
+      SPARK4_MVN_OPTS=$2
+      shift
+      ;;
     --hadoop-profile)
       HADOOP_PROFILE_ID=$2
       shift
@@ -90,12 +103,16 @@ while (( "$#" )); do
     --without-spark)
       WITH_SPARK2="false"
       WITH_SPARK3="false"
+      WITH_SPARK4="false"
       ;;
     --without-spark2)
       WITH_SPARK2="false"
       ;;
     --without-spark3)
       WITH_SPARK3="false"
+      ;;
+    --without-spark4)
+      WITH_SPARK4="false"
       ;;
     --without-dashboard)
       WITH_DASHBOARD="false"
@@ -122,14 +139,14 @@ while (( "$#" )); do
   shift
 done
 
-echo "Installing git"
-
-apt update
-apt install -y git
-
-# Git sets a security requirement that the user running git should match the owner of the files
-# For building it is fine to set an exception
-git config --global --add safe.directory /incubator-uniffle
+if [[ "$(uname)" == "Linux" ]]; then
+  echo "Installing git"
+  apt update
+  apt install -y git
+  # Git sets a security requirement that the user running git should match the owner of the files
+  # For building it is fine to set an exception
+  git config --global --add safe.directory /incubator-uniffle
+fi
 
 cd $RSS_HOME
 
@@ -159,12 +176,17 @@ SPARK3_VERSION=$("$MVN" help:evaluate -Dexpression=spark.version -P$SPARK3_PROFI
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
+SPARK4_VERSION=$("$MVN" help:evaluate -Dexpression=spark.version -P$SPARK4_PROFILE_ID $@ $SPARK4_MVN_OPTS 2>/dev/null\
+    | grep -v "INFO"\
+    | grep -v "WARNING"\
+    | tail -n 1)
 
 if [ "$NAME" == "none" ]; then
   NAME=$HADOOP_PROFILE_ID
 fi
 
 echo "RSS version is $VERSION"
+echo "Spark 4 version is $SPARK4_VERSION"
 
 export MAVEN_OPTS="${MAVEN_OPTS:--Xss128m -Xmx5g -XX:ReservedCodeCacheSize=1g}"
 
@@ -184,8 +206,8 @@ echo -e "\$ ${BUILD_COMMAND[@]}\n"
 DISTDIR="rss-$VERSION-$NAME"
 rm -rf "$DISTDIR"
 mkdir -p "${DISTDIR}/jars"
-echo "RSS ${VERSION}${GITREVSTRING} built for Hadoop ${HADOOP_VERSION} Spark2 ${SPARK2_VERSION} Spark3 ${SPARK3_VERSION}" >"${DISTDIR}/RELEASE"
-echo "Build flags: --spark2-profile '$SPARK2_PROFILE_ID' --spark2-mvn '$SPARK2_MVN_OPTS' --spark3-profile '$SPARK3_PROFILE_ID' --spark3-mvn '$SPARK3_MVN_OPTS' --hadoop-profile '$HADOOP_PROFILE_ID' $@" >>"$DISTDIR/RELEASE"
+echo "RSS ${VERSION}${GITREVSTRING} built for Hadoop ${HADOOP_VERSION} Spark2 ${SPARK2_VERSION} Spark3 ${SPARK3_VERSION} Spark4 ${SPARK4_VERSION}" >"${DISTDIR}/RELEASE"
+echo "Build flags: --spark2-profile '$SPARK2_PROFILE_ID' --spark2-mvn '$SPARK2_MVN_OPTS' --spark3-profile '$SPARK3_PROFILE_ID' --spark3-mvn '$SPARK3_MVN_OPTS' --spark4-profile '$SPARK4_PROFILE_ID' --spark4-mvn '$SPARK4_MVN_OPTS' --hadoop-profile '$HADOOP_PROFILE_ID' $@" >>"$DISTDIR/RELEASE"
 mkdir -p "${DISTDIR}/logs"
 
 SERVER_JAR_DIR="${DISTDIR}/jars/server"
@@ -240,6 +262,22 @@ if [ "$WITH_SPARK3" == "true" ]; then
   SPARK_CLIENT3_JAR="${RSS_HOME}/client-spark/spark3-shaded/target/rss-client-spark3-shaded-${VERSION}.jar"
   echo "copy $SPARK_CLIENT3_JAR to ${SPARK_CLIENT3_JAR_DIR}"
   cp $SPARK_CLIENT3_JAR $SPARK_CLIENT3_JAR_DIR
+fi
+
+if [ "$WITH_SPARK4" == "true" ]; then
+  BUILD_COMMAND_SPARK4=("$MVN" clean package -P$SPARK4_PROFILE_ID,$HADOOP_PROFILE_ID -pl client-spark/spark3-shaded -DskipTests -am $@ $SPARK4_MVN_OPTS)
+
+  echo -e "\nBuilding with..."
+  echo -e "Spark 4 version is $SPARK4_VERSION"
+  echo -e "\$ ${BUILD_COMMAND_SPARK4[@]}\n"
+  "${BUILD_COMMAND_SPARK4[@]}"
+
+  SPARK_CLIENT4_JAR_DIR="${CLIENT_JAR_DIR}/spark4"
+  mkdir -p $SPARK_CLIENT4_JAR_DIR
+  SPARK_CLIENT4_JAR_SRC="${RSS_HOME}/client-spark/spark3-shaded/target/rss-client-spark3-shaded-${VERSION}.jar"
+  SPARK_CLIENT4_JAR_DEST="${SPARK_CLIENT4_JAR_DIR}/rss-client-spark4-shaded-${VERSION}.jar"
+  echo "copy $SPARK_CLIENT4_JAR_SRC to ${SPARK_CLIENT4_JAR_DEST}"
+  cp "$SPARK_CLIENT4_JAR_SRC" "$SPARK_CLIENT4_JAR_DEST"
 fi
 
 if [ "$WITH_MR" == "true" ]; then
