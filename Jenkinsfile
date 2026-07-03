@@ -16,8 +16,25 @@ node("local") {
         set -ex
         git status
         docker login -u ${USERNAME} -p ${PASSWORD} $dockerRegistry
+        mkdir -p "\$WORKSPACE@tmp"
+        cat > "\$WORKSPACE@tmp/mvn-settings.xml" <<EOF
+<settings>
+  <servers>
+    <server>
+      <id>HopsEE</id>
+      <username>${USERNAME}</username>
+      <password>${PASSWORD}</password>
+    </server>
+  </servers>
+</settings>
+EOF
 
-        docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  eclipse-temurin:17-jdk /bin/bash build_distribution.sh --spark4-profile spark4.1 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2 --without-spark3
+        docker run --rm \
+          -v .:/incubator-uniffle \
+          -v "\$WORKSPACE@tmp/mvn-settings.xml:/tmp/mvn-settings.xml:ro" \
+          -w /incubator-uniffle \
+          eclipse-temurin:17-jdk \
+          /bin/bash build_distribution.sh --spark4-profile spark4.1 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2 --without-spark3 -s /tmp/mvn-settings.xml -U
 
         cd deploy/kubernetes/docker ||  exit
         ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
