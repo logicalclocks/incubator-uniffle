@@ -26,6 +26,11 @@ node("local") {
       <username>${USERNAME}</username>
       <password>${PASSWORD}</password>
     </server>
+    <server>
+      <id>HopsHive</id>
+      <username>${USERNAME}</username>
+      <password>${PASSWORD}</password>
+    </server>
   </servers>
 </settings>
 EOF
