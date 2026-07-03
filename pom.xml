@@ -162,6 +162,17 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>HopsHive</id>
+      <name>Hops Hive Repository</name>
+      <url>https://nexus.hops.works/repository/hive-artifacts</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
   </repositories>
 
   <modules>
