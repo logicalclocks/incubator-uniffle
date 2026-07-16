@@ -46,12 +46,26 @@ public class ShuffleReadTimes {
     return fetch;
   }
 
+  // setters are required by Jackson to deserialize this class
+  // from the event log when the history server replays it
+  public void setFetch(long fetch) {
+    this.fetch = fetch;
+  }
+
   public long getCrc() {
     return crc;
   }
 
+  public void setCrc(long crc) {
+    this.crc = crc;
+  }
+
   public long getCopy() {
     return copy;
+  }
+
+  public void setCopy(long copy) {
+    this.copy = copy;
   }
 
   public void withDeserialized(long deserialized) {
@@ -66,6 +80,10 @@ public class ShuffleReadTimes {
     return deserialize;
   }
 
+  public void setDeserialize(long deserialize) {
+    this.deserialize = deserialize;
+  }
+
   public long getDecompress() {
     return decompress;
   }
@@ -74,8 +92,20 @@ public class ShuffleReadTimes {
     return backgroundDecompress;
   }
 
+  public void setBackgroundDecompress(long backgroundDecompress) {
+    this.backgroundDecompress = backgroundDecompress;
+  }
+
   public long getBackgroundFetch() {
     return backgroundFetch;
+  }
+
+  public void setBackgroundFetch(long backgroundFetch) {
+    this.backgroundFetch = backgroundFetch;
+  }
+
+  public void setDecompress(long decompress) {
+    this.decompress = decompress;
   }
 
   public void merge(ShuffleReadTimes other) {

@@ -31,6 +31,10 @@ public class TaskShuffleReadInfoEvent extends UniffleEvent {
   private ShuffleReadTimes shuffleReadTimes;
   private long taskAttemptNumber;
 
+  // no-arg constructor and setters are required by Jackson to deserialize
+  // this event from the event log when the history server replays it
+  public TaskShuffleReadInfoEvent() {}
+
   public TaskShuffleReadInfoEvent(
       int stageId,
       int shuffleId,
@@ -54,24 +58,48 @@ public class TaskShuffleReadInfoEvent extends UniffleEvent {
     return stageId;
   }
 
+  public void setStageId(int stageId) {
+    this.stageId = stageId;
+  }
+
   public int getShuffleId() {
     return shuffleId;
+  }
+
+  public void setShuffleId(int shuffleId) {
+    this.shuffleId = shuffleId;
   }
 
   public long getTaskId() {
     return taskId;
   }
 
+  public void setTaskId(long taskId) {
+    this.taskId = taskId;
+  }
+
   public Map<String, ShuffleReadMetric> getMetrics() {
     return metrics;
+  }
+
+  public void setMetrics(Map<String, ShuffleReadMetric> metrics) {
+    this.metrics = metrics;
   }
 
   public boolean isShuffleReadFailed() {
     return isShuffleReadFailed;
   }
 
+  public void setShuffleReadFailed(boolean shuffleReadFailed) {
+    this.isShuffleReadFailed = shuffleReadFailed;
+  }
+
   public String getFailureReason() {
     return failureReason;
+  }
+
+  public void setFailureReason(String failureReason) {
+    this.failureReason = failureReason;
   }
 
   public ShuffleReadTimes getShuffleReadTimes() {
@@ -80,5 +108,13 @@ public class TaskShuffleReadInfoEvent extends UniffleEvent {
 
   public long getTaskAttemptNumber() {
     return taskAttemptNumber;
+  }
+
+  public void setTaskAttemptNumber(long taskAttemptNumber) {
+    this.taskAttemptNumber = taskAttemptNumber;
+  }
+
+  public void setShuffleReadTimes(ShuffleReadTimes shuffleReadTimes) {
+    this.shuffleReadTimes = shuffleReadTimes;
   }
 }

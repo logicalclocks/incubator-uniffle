@@ -30,6 +30,10 @@ public class TaskShuffleWriteInfoEvent extends UniffleEvent {
   private long uncompressedByteSize;
   private long taskAttemptNumber;
 
+  // no-arg constructor and setters are required by Jackson to deserialize
+  // this event from the event log when the history server replays it
+  public TaskShuffleWriteInfoEvent() {}
+
   public TaskShuffleWriteInfoEvent(
       int stageId,
       int shuffleId,
@@ -55,28 +59,56 @@ public class TaskShuffleWriteInfoEvent extends UniffleEvent {
     return stageId;
   }
 
+  public void setStageId(int stageId) {
+    this.stageId = stageId;
+  }
+
   public int getShuffleId() {
     return shuffleId;
+  }
+
+  public void setShuffleId(int shuffleId) {
+    this.shuffleId = shuffleId;
   }
 
   public long getTaskId() {
     return taskId;
   }
 
+  public void setTaskId(long taskId) {
+    this.taskId = taskId;
+  }
+
   public Map<String, ShuffleWriteMetric> getMetrics() {
     return metrics;
+  }
+
+  public void setMetrics(Map<String, ShuffleWriteMetric> metrics) {
+    this.metrics = metrics;
   }
 
   public ShuffleWriteTimes getWriteTimes() {
     return writeTimes;
   }
 
+  public void setWriteTimes(ShuffleWriteTimes writeTimes) {
+    this.writeTimes = writeTimes;
+  }
+
   public boolean isShuffleWriteFailed() {
     return isShuffleWriteFailed;
   }
 
+  public void setShuffleWriteFailed(boolean shuffleWriteFailed) {
+    this.isShuffleWriteFailed = shuffleWriteFailed;
+  }
+
   public String getFailureReason() {
     return failureReason;
+  }
+
+  public void setFailureReason(String failureReason) {
+    this.failureReason = failureReason;
   }
 
   public long getUncompressedByteSize() {
@@ -85,5 +117,13 @@ public class TaskShuffleWriteInfoEvent extends UniffleEvent {
 
   public long getTaskAttemptNumber() {
     return taskAttemptNumber;
+  }
+
+  public void setTaskAttemptNumber(long taskAttemptNumber) {
+    this.taskAttemptNumber = taskAttemptNumber;
+  }
+
+  public void setUncompressedByteSize(long uncompressedByteSize) {
+    this.uncompressedByteSize = uncompressedByteSize;
   }
 }
