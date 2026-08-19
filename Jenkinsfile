@@ -1,13 +1,16 @@
 node("local") {
   def dockerRegistry = 'n59k7749.c1.de1.container-registry.ovh.net'
-  def version = readFile("${env.WORKSPACE}/version.txt").trim()
-  def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version.trim()}"
-  def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version.trim()}"
   def uniffleVersion = "0.10.1"
 
   stage('Clone repository') {
       checkout scm
   }
+
+  // Read after checkout. The workspace is persistent, so reading version.txt before
+  // it yields the previous build's value and tags the operator images one release behind.
+  def version = readFile("${env.WORKSPACE}/version.txt").trim()
+  def controllerImage = "${dockerRegistry}/hopsworks/rss-controller:${version}"
+  def webhookImage = "${dockerRegistry}/hopsworks/rss-webhook:${version}"
 
   stage('Build and push images to registry') {
 
