@@ -20,7 +20,7 @@ node("local") {
         docker run --rm -v .:/incubator-uniffle -w /incubator-uniffle  eclipse-temurin:8-jdk /bin/bash build_distribution.sh --spark3-profile spark3.5 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2
 
         cd deploy/kubernetes/docker ||  exit
-        ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
+        ./build.sh --hadoop-version 3.4.3.2-EE-RC2 --hadoop-profile hadoop3.2 --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
         cd ../../..
 
         mkdir -p /opt/repository/master/rss/$version/

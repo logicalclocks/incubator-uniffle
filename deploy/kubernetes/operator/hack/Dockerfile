@@ -16,7 +16,7 @@
 #
 
 # Build the binary
-FROM golang:1.23 as builder
+FROM golang:1.25 as builder
 
 ARG MODULE
 WORKDIR /workspace
@@ -41,7 +41,7 @@ FROM debian:13-slim
 # each stage.
 ARG MODULE
 WORKDIR /
-RUN apt-get update && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /workspace/${MODULE} .
 ENV OPERATOR_BIN=${MODULE}
 ENTRYPOINT ["/${OPERATOR_BIN}"]

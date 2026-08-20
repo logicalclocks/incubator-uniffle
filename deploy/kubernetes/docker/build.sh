@@ -27,7 +27,8 @@ function exit_with_usage() {
   echo ""
   echo "Usage:"
   echo "+------------------------------------------------------------------------------------------------------+"
-  echo "| ./build.sh [--hadoop-version <hadoop version>] [--registry <registry url>] [--author <author name>]  |"
+  echo "| ./build.sh [--hadoop-version <hadoop version>] [--hadoop-profile <maven profile id>]                 |"
+  echo "|            [--registry <registry url>] [--author <author name>]                                      |"
   echo "|            [--base-os-distribution <os distribution>] [--base-image <base image url>]                |"
   echo "|            [--push-image <true|false>] [--apache-mirror <apache mirror url>] [--nexus-user <nexus username>]
                      [--nexus-password <nexus password>]  |"
@@ -37,6 +38,10 @@ function exit_with_usage() {
 
 REGISTRY="docker.io/library"
 HADOOP_VERSION=3.2.0.16-EE-SNAPSHOT
+# The maven profile build_distribution.sh was run with. It names the client
+# tarball (rss-<version>-<profile>.tgz) and is independent of the Hadoop
+# distribution shipped in the image. Defaults to the dist's major.minor.
+HADOOP_PROFILE=""
 AUTHOR=$(whoami)
 # If you are based in China, you could pass --apache-mirror <a_mirror_url> when building this.
 APACHE_MIRROR="https://dlcdn.apache.org"
@@ -52,7 +57,10 @@ while (( "$#" )); do
       ;;
     --hadoop-version)
       HADOOP_VERSION="$2"
-      HADOOP_SHORT_VERSION=$(echo "$HADOOP_VERSION" | awk -F "." '{print $1"."$2}')
+      shift
+      ;;
+    --hadoop-profile)
+      HADOOP_PROFILE="$2"
       shift
       ;;
     --author)
@@ -101,7 +109,10 @@ while (( "$#" )); do
   shift
 done
 
-HADOOP_SHORT_VERSION=$(echo $HADOOP_VERSION | awk -F "." '{print $1"."$2}')
+if [ -z "$HADOOP_PROFILE" ]; then
+  HADOOP_PROFILE=hadoop$(echo "$HADOOP_VERSION" | awk -F "." '{print $1"."$2}')
+fi
+HADOOP_SHORT_VERSION=${HADOOP_PROFILE#hadoop}
 
 if [ -z "$BASE_IMAGE" ]; then
   echo "start building base image: uniffle-base"
