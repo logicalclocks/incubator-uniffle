@@ -43,7 +43,7 @@ EOF
           /bin/bash build_distribution.sh --spark4-profile spark4.1 --hadoop-profile hadoop3.2 --without-mr --without-tez --without-spark2 --without-spark3 -s /tmp/mvn-settings.xml -U
 
         cd deploy/kubernetes/docker ||  exit
-        ./build.sh --hadoop-version 3.2.0.15-EE-SNAPSHOT --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
+        ./build.sh --hadoop-version 3.4.3.2-EE-RC2 --hadoop-profile hadoop3.2 --registry $dockerRegistry --nexus-user $USERNAME --nexus-password $PASSWORD --push-image true
         cd ../../..
 
         mkdir -p /opt/repository/master/rss/$version/
