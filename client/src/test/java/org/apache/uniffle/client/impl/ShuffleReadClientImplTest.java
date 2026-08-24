@@ -18,16 +18,20 @@
 package org.apache.uniffle.client.impl;
 
 import java.nio.ByteBuffer;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.roaringbitmap.longlong.LongIterator;
@@ -35,10 +39,10 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.TestUtils;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
-import org.apache.uniffle.client.response.ShuffleBlock;
 import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.ShufflePartitionedBlock;
 import org.apache.uniffle.common.ShuffleServerInfo;
+import org.apache.uniffle.common.compression.NoOpCodec;
 import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.util.BlockId;
@@ -48,22 +52,26 @@ import org.apache.uniffle.storage.HadoopTestBase;
 import org.apache.uniffle.storage.handler.impl.HadoopShuffleWriteHandler;
 import org.apache.uniffle.storage.util.StorageType;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 
 public class ShuffleReadClientImplTest extends HadoopTestBase {
 
   private static final String EXPECTED_EXCEPTION_MESSAGE = "Exception should be thrown";
   private static AtomicInteger ATOMIC_INT = new AtomicInteger(0);
 
-  private ShuffleServerInfo ssi1 = new ShuffleServerInfo("host1-0", "host1", 0);
-  private ShuffleServerInfo ssi2 = new ShuffleServerInfo("host2-0", "host2", 0);
+  private static ShuffleServerInfo ssi1 = new ShuffleServerInfo("host1-0", "host1", 0);
+  private static ShuffleServerInfo ssi2 = new ShuffleServerInfo("host2-0", "host2", 0);
 
-  private ShuffleClientFactory.ReadClientBuilder baseReadBuilder() {
+  private static AtomicInteger UNIQ_INT = new AtomicInteger(0);
+
+  private static ShuffleClientFactory.ReadClientBuilder baseReadBuilder() {
     return ShuffleClientFactory.newReadBuilder()
         .clientType(ClientType.GRPC)
         .storageType(StorageType.HDFS.name())
@@ -77,9 +85,26 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
         .shuffleServerInfoList(Lists.newArrayList(ssi1));
   }
 
-  @Test
-  public void readTest1() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest1";
+  private static ShuffleClientFactory.ReadClientBuilder overlappingDecompressionReadBuilder() {
+    return baseReadBuilder()
+        .codec(NoOpCodec.getInstance())
+        .overlappingDecompressionThreadNum(1)
+        .overlappingDecompressionEnabled(true);
+  }
+
+  private static Stream<Supplier<ShuffleClientFactory.ReadClientBuilder>> clientBuilderProvider() {
+    return Stream.of(() -> baseReadBuilder(), () -> overlappingDecompressionReadBuilder());
+  }
+
+  private String uniq(String path) {
+    return String.format("%s-%s", path, UNIQ_INT.getAndIncrement());
+  }
+
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest1(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest1");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
 
@@ -88,7 +113,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler, 2, 30, 1, 0, expectedData, blockIdBitmap);
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .basePath(basePath)
             .blockIdBitmap(blockIdBitmap)
@@ -102,7 +128,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     blockIdBitmap.addLong(layout.getBlockId(0, 0, layout.maxTaskAttemptId - 1));
     taskIdBitmap.addLong(layout.maxTaskAttemptId - 1);
     readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .basePath(basePath)
             .blockIdBitmap(blockIdBitmap)
@@ -120,9 +147,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     }
   }
 
-  @Test
-  public void readTest2() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest2";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest2(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest2");
     HadoopShuffleWriteHandler writeHandler1 =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
     HadoopShuffleWriteHandler writeHandler2 =
@@ -135,7 +164,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     writeTestData(writeHandler2, 2, 30, 0, 0, expectedData, blockIdBitmap);
 
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -148,9 +178,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest3() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest3";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest3(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest3");
     HadoopShuffleWriteHandler writeHandler1 =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
     HadoopShuffleWriteHandler writeHandler2 =
@@ -194,7 +226,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
         conf);
 
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -207,9 +240,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest4() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest4";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest4(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest4");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
@@ -219,7 +254,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     writeTestData(writeHandler, 2, 30, 0, 0, expectedData, blockIdBitmap);
 
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -253,9 +289,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest5() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest5";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest5(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest5");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
@@ -264,7 +302,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler, 2, 30, 0, 0, expectedData, blockIdBitmap);
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -280,9 +319,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     assertNull(readClient.readShuffleBlockData());
   }
 
-  @Test
-  public void readTest7() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest7";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest7(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest7");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
@@ -297,7 +338,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
 
     writeTestData(writeHandler, 10, 30, 0, 0, expectedData1, blockIdBitmap1);
     ShuffleReadClientImpl readClient1 =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -306,7 +348,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
             .build();
 
     final ShuffleReadClientImpl readClient2 =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -322,18 +365,24 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient2.close();
   }
 
-  @Test
-  public void readTest8() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest8";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest8(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest8");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
+    HadoopShuffleWriteHandler writeHandler2 =
+        new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi2.getId(), conf);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
+    LinkedHashMap<Long, byte[]> expectedData = Maps.newLinkedHashMap();
     Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler, 2, 30, 0, 0, expectedData, blockIdBitmap);
+    writeTestData(writeHandler2, 2, 30, 0, 0, expectedData, blockIdBitmap);
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -341,7 +390,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
             .taskIdBitmap(taskIdBitmap)
             .build();
     ShuffleReadClientImpl readClient2 =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -350,8 +400,19 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
             .shuffleServerInfoList(Lists.newArrayList(ssi1, ssi2))
             .build();
     // crc32 is incorrect
+    AtomicInteger readCount = new AtomicInteger(0);
     try (MockedStatic<ChecksumUtils> checksumUtilsMock = Mockito.mockStatic(ChecksumUtils.class)) {
-      checksumUtilsMock.when(() -> ChecksumUtils.getCrc32((ByteBuffer) any())).thenReturn(-1L);
+      checksumUtilsMock
+          .when(() -> ChecksumUtils.getCrc32(any(ByteBuffer.class), anyInt(), anyInt()))
+          .then(
+              invocation -> {
+                // crc check fails for readClient1 and frist block of readClient2
+                if (readCount.getAndIncrement() < 2) {
+                  return -1;
+                } else {
+                  return invocation.callRealMethod();
+                }
+              });
       try {
         ByteBuffer bb = readClient.readShuffleBlockData().getByteBuffer();
         while (bb != null) {
@@ -359,25 +420,31 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
         }
         fail(EXPECTED_EXCEPTION_MESSAGE);
       } catch (Exception e) {
-        assertTrue(
-            e.getMessage()
-                .startsWith(
-                    "Unexpected crc value for blockId[5800000000000 (seq: 44, part: 0, task: 0)]"),
-            e.getMessage());
+        assertTrue(e.getMessage().startsWith("Unexpected crc value"), e.getMessage());
       }
 
-      ShuffleBlock block = readClient2.readShuffleBlockData();
-      assertNull(block);
+      // the frist block has been skipped due to crc check failure
+      Long firstKey = expectedData.keySet().iterator().next();
+      expectedData.remove(firstKey);
+      TestUtils.validateResult(readClient2, expectedData);
+      try {
+        readClient2.checkProcessedBlockIds();
+      } catch (Exception e) {
+        assertTrue(e.getMessage().contains("expected 4 blocks, actual 3 blocks"), e.getMessage());
+      }
     }
     readClient.close();
     readClient2.close();
   }
 
-  @Test
-  public void readTest9() {
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest9(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
     // empty data
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath("basePath")
@@ -388,9 +455,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.checkProcessedBlockIds();
   }
 
-  @Test
-  public void readTest10() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest10";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest10(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest10");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
@@ -408,7 +477,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     }
 
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -424,9 +494,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     }
   }
 
-  @Test
-  public void readTest11() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest11";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest11(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest11");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
 
@@ -436,7 +508,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     writeTestData(writeHandler, 10, 30, 1, 0, expectedData, blockIdBitmap);
     // test with different indexReadLimit to validate result
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .indexReadLimit(1)
             .basePath(basePath)
@@ -448,7 +521,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
 
     readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .indexReadLimit(2)
             .basePath(basePath)
@@ -460,7 +534,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
 
     readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .indexReadLimit(3)
             .basePath(basePath)
@@ -472,7 +547,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
 
     readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .indexReadLimit(10)
             .basePath(basePath)
@@ -484,7 +560,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
 
     readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .indexReadLimit(11)
             .basePath(basePath)
@@ -496,9 +573,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest12() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest12";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest12(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest12");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
 
@@ -511,7 +590,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
 
     // unexpected taskAttemptId should be filtered
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .basePath(basePath)
             .blockIdBitmap(blockIdBitmap)
@@ -523,24 +603,30 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest13() throws Exception {
-    doReadTest13(BlockIdLayout.DEFAULT);
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest13(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    doReadTest13(BlockIdLayout.DEFAULT, builderSupplier);
   }
 
-  @Test
-  public void readTest13b() throws Exception {
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest13b(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
     // This test is identical to readTest13, except that it does not use the default BlockIdLayout
     // the layout is only used by IdHelper that extracts the task attempt id from the block id
     // the partition id has to be larger than 0, so that it can leak into the task attempt id
     // if the default layout is being used
     BlockIdLayout layout = BlockIdLayout.from(22, 21, 20);
     assertNotEquals(layout, BlockIdLayout.DEFAULT);
-    doReadTest13(layout);
+    doReadTest13(layout, builderSupplier);
   }
 
-  public void doReadTest13(BlockIdLayout layout) throws Exception {
-    String basePath = HDFS_URI + "clientReadTest13-" + layout.hashCode();
+  public void doReadTest13(
+      BlockIdLayout layout, Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest13-" + layout.hashCode());
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
 
@@ -564,7 +650,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     // unexpected taskAttemptId should be filtered
     assertEquals(15, blockIdBitmap.getIntCardinality());
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .basePath(basePath)
             .blockIdBitmap(blockIdBitmap)
@@ -585,7 +672,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
       // the particular layout that created the block ids is incompatible with default layout, so
       // all block ids will be skipped
       // note that skipped block ids in blockIdBitmap will be removed by `build()`
-      baseReadBuilder()
+      builderSupplier
+          .get()
           .basePath(basePath)
           .blockIdBitmap(blockIdBitmap)
           .partitionId(1)
@@ -596,9 +684,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     }
   }
 
-  @Test
-  public void readTest14() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest14";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest14(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest14");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
 
@@ -611,7 +701,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
 
     // unexpected taskAttemptId should be filtered
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .basePath(basePath)
             .blockIdBitmap(blockIdBitmap)
@@ -623,9 +714,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest15() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest15";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest15(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest15");
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
 
@@ -640,7 +733,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     writeTestData(writeHandler, 5, 30, 1, 0, Maps.newHashMap(), Roaring64NavigableMap.bitmapOf());
     // unexpected taskAttemptId should be filtered
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .basePath(basePath)
             .blockIdBitmap(blockIdBitmap)
@@ -652,9 +746,11 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
   }
 
-  @Test
-  public void readTest16() throws Exception {
-    String basePath = HDFS_URI + "clientReadTest16";
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTest16(Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier)
+      throws Exception {
+    String basePath = uniq(HDFS_URI + "clientReadTest16");
     HadoopShuffleWriteHandler writeHandler0 =
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
     HadoopShuffleWriteHandler writeHandler1 =
@@ -668,7 +764,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     writeTestData(writeHandler1, 2, 30, 1, 1, expectedData1, blockIdBitmap1);
 
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(0)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -681,7 +778,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.close();
 
     readClient =
-        baseReadBuilder()
+        builderSupplier
+            .get()
             .partitionId(1)
             .partitionNumPerRange(2)
             .basePath(basePath)
@@ -690,6 +788,47 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
             .shuffleServerInfoList(Lists.newArrayList(ssi1, ssi2))
             .build();
     TestUtils.validateResult(readClient, expectedData1);
+    readClient.checkProcessedBlockIds();
+    readClient.close();
+  }
+
+  @ParameterizedTest
+  @MethodSource("clientBuilderProvider")
+  public void readTestSkipBlocksWithBackpressureDoesNotHang(
+      Supplier<ShuffleClientFactory.ReadClientBuilder> builderSupplier) throws Exception {
+    // This test is meaningful only when overlapping decompression is enabled.
+    // For non-overlapping mode, it should still pass and act as a regression guard.
+    String basePath = uniq(HDFS_URI + "clientReadTestSkipBlocksWithBackpressureDoesNotHang");
+    HadoopShuffleWriteHandler writeHandler =
+        new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
+
+    Map<Long, byte[]> expectedData = Maps.newHashMap();
+    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+
+    // Write skipped blocks first to increase the chance of exhausting permits if permits are not
+    // released when skipping.
+    writeTestData(writeHandler, 20, 30, 1, 2, Maps.newHashMap(), blockIdBitmap);
+    writeTestData(writeHandler, 5, 30, 1, 0, expectedData, blockIdBitmap);
+
+    RssConf rssConf = new RssConf();
+    // Provide required base configs to avoid reader treating this as "prod mode" with empty values.
+    rssConf.set(RssClientConf.RSS_STORAGE_TYPE, StorageType.HDFS.name());
+    rssConf.setInteger(RssClientConf.RSS_READ_OVERLAPPING_DECOMPRESSION_FETCH_SECONDS_THRESHOLD, 1);
+    rssConf.setInteger(RssClientConf.RSS_READ_OVERLAPPING_DECOMPRESSION_MAX_CONCURRENT_SEGMENTS, 1);
+
+    // Expect only taskAttemptId=0 blocks; taskAttemptId=2 blocks will be skipped by the reader.
+    Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
+    ShuffleReadClientImpl readClient =
+        builderSupplier
+            .get()
+            .partitionId(1)
+            .basePath(basePath)
+            .blockIdBitmap(blockIdBitmap)
+            .taskIdBitmap(taskIdBitmap)
+            .rssConf(rssConf)
+            .build();
+
+    assertDoesNotThrow(() -> TestUtils.validateResult(readClient, expectedData));
     readClient.checkProcessedBlockIds();
     readClient.close();
   }

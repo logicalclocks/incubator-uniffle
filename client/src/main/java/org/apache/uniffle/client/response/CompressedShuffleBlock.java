@@ -19,18 +19,32 @@ package org.apache.uniffle.client.response;
 
 import java.nio.ByteBuffer;
 
-public class CompressedShuffleBlock implements ShuffleBlock {
+public class CompressedShuffleBlock extends ShuffleBlock {
   private ByteBuffer byteBuffer;
-  private int uncompressLength;
+  private int uncompressedLength;
+  private int compressedLength;
 
-  public CompressedShuffleBlock(ByteBuffer byteBuffer, int uncompressLength) {
+  public CompressedShuffleBlock(
+      ByteBuffer byteBuffer, int uncompressedLength, int compressedlength) {
+    this(byteBuffer, uncompressedLength, -1, compressedlength);
+  }
+
+  public CompressedShuffleBlock(
+      ByteBuffer byteBuffer, int uncompressedLength, long taskAttemptId, int compressedlength) {
+    super(taskAttemptId);
     this.byteBuffer = byteBuffer;
-    this.uncompressLength = uncompressLength;
+    this.uncompressedLength = uncompressedLength;
+    this.compressedLength = compressedlength;
+  }
+
+  @Override
+  public int getCompressedLength() {
+    return compressedLength;
   }
 
   @Override
   public int getUncompressLength() {
-    return uncompressLength;
+    return uncompressedLength;
   }
 
   @Override

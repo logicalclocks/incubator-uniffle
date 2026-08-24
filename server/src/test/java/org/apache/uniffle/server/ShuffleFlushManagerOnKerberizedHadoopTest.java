@@ -32,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +55,10 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@DisabledIfSystemProperty(
+    named = "uniffle.test.skip.kerberos",
+    matches = "true",
+    disabledReason = "MiniKdc is not compatible with JDK 17+")
 public class ShuffleFlushManagerOnKerberizedHadoopTest extends KerberizedHadoopBase {
   private static final Logger LOGGER =
       LoggerFactory.getLogger(ShuffleFlushManagerOnKerberizedHadoopTest.class);
@@ -124,8 +129,8 @@ public class ShuffleFlushManagerOnKerberizedHadoopTest extends KerberizedHadoopB
     manager.addToFlushQueue(event2);
     waitForFlush(manager, appId1, 1, 5);
     waitForFlush(manager, appId2, 1, 5);
-    assertEquals(5, manager.getCommittedBlockIds(appId1, 1).getLongCardinality());
-    assertEquals(5, manager.getCommittedBlockIds(appId2, 1).getLongCardinality());
+    assertEquals(5, manager.getCommittedBlockCount(appId1, 1));
+    assertEquals(5, manager.getCommittedBlockCount(appId2, 1));
     assertEquals(storageManager.selectStorage(event1), storageManager.selectStorage(event2));
     AbstractStorage storage = (AbstractStorage) storageManager.selectStorage(event1);
     int size = storage.getHandlerSize();
@@ -155,15 +160,15 @@ public class ShuffleFlushManagerOnKerberizedHadoopTest extends KerberizedHadoopB
 
     assertTrue(kerberizedHadoop.getFileSystem().exists(new Path(remoteStorage.getPath())));
 
-    assertEquals(0, manager.getCommittedBlockIds(appId1, 1).getLongCardinality());
-    assertEquals(5, manager.getCommittedBlockIds(appId2, 1).getLongCardinality());
+    assertEquals(0, manager.getCommittedBlockCount(appId1, 1));
+    assertEquals(5, manager.getCommittedBlockCount(appId2, 1));
     size = storage.getHandlerSize();
     assertEquals(1, size);
     manager.removeResources(appId2);
     assertTrue(((HadoopStorageManager) storageManager).getAppIdToStorages().containsKey(appId2));
     storageManager.removeResources(new AppPurgeEvent(appId2, "alex", Arrays.asList(1)));
     assertFalse(((HadoopStorageManager) storageManager).getAppIdToStorages().containsKey(appId2));
-    assertEquals(0, manager.getCommittedBlockIds(appId2, 1).getLongCardinality());
+    assertEquals(0, manager.getCommittedBlockCount(appId2, 1));
     size = storage.getHandlerSize();
     assertEquals(0, size);
   }

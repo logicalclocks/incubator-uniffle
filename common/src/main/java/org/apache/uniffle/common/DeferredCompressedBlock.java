@@ -18,6 +18,7 @@
 package org.apache.uniffle.common;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import io.netty.buffer.ByteBuf;
@@ -31,7 +32,7 @@ import io.netty.buffer.Unpooled;
 public class DeferredCompressedBlock extends ShuffleBlockInfo {
   private final Function<DeferredCompressedBlock, DeferredCompressedBlock> rebuildFunction;
   private int estimatedCompressedSize;
-  private boolean isInitialized = false;
+  private AtomicBoolean isInitialized = new AtomicBoolean(false);
 
   public DeferredCompressedBlock(
       int shuffleId,
@@ -43,7 +44,8 @@ public class DeferredCompressedBlock extends ShuffleBlockInfo {
       long taskAttemptId,
       Function<Integer, List<ShuffleServerInfo>> partitionAssignmentRetrieveFunc,
       Function<DeferredCompressedBlock, DeferredCompressedBlock> rebuildFunction,
-      int estimatedCompressedSize) {
+      int estimatedCompressedSize,
+      long records) {
     super(
         shuffleId,
         partitionId,
@@ -52,7 +54,8 @@ public class DeferredCompressedBlock extends ShuffleBlockInfo {
         uncompressLength,
         freeMemory,
         taskAttemptId,
-        partitionAssignmentRetrieveFunc);
+        partitionAssignmentRetrieveFunc,
+        records);
     this.rebuildFunction = rebuildFunction;
     this.estimatedCompressedSize = estimatedCompressedSize;
   }
@@ -64,9 +67,13 @@ public class DeferredCompressedBlock extends ShuffleBlockInfo {
   }
 
   private void initialize() {
-    if (!isInitialized) {
-      rebuildFunction.apply(this);
-      isInitialized = true;
+    if (!isInitialized.get()) {
+      synchronized (this) {
+        if (!isInitialized.get()) {
+          rebuildFunction.apply(this);
+          isInitialized.set(true);
+        }
+      }
     }
   }
 

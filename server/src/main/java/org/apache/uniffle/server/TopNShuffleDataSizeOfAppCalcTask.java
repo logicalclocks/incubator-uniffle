@@ -19,7 +19,6 @@ package org.apache.uniffle.server;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -27,6 +26,8 @@ import java.util.stream.Collectors;
 import io.prometheus.client.Gauge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.uniffle.common.util.ThreadUtils;
 
 public class TopNShuffleDataSizeOfAppCalcTask {
   private static final Logger LOG = LoggerFactory.getLogger(TopNShuffleDataSizeOfAppCalcTask.class);
@@ -36,6 +37,8 @@ public class TopNShuffleDataSizeOfAppCalcTask {
 
   private final Gauge gaugeTotalDataSize;
   private final Gauge gaugeInMemoryDataSize;
+  private final Gauge gaugeInMemoryBlockCount;
+  private final Gauge gaugeInMemoryAvgBlockSize;
   private final Gauge gaugeOnLocalFileDataSize;
   private final Gauge gaugeOnHadoopDataSize;
 
@@ -49,9 +52,13 @@ public class TopNShuffleDataSizeOfAppCalcTask {
     shuffleTaskManager = taskManager;
     this.gaugeTotalDataSize = ShuffleServerMetrics.gaugeTotalDataSizeUsage;
     this.gaugeInMemoryDataSize = ShuffleServerMetrics.gaugeInMemoryDataSizeUsage;
+    this.gaugeInMemoryBlockCount = ShuffleServerMetrics.gaugeInMemoryBlockCount;
+    this.gaugeInMemoryAvgBlockSize = ShuffleServerMetrics.gaugeInMemoryAvgBlockSize;
     this.gaugeOnLocalFileDataSize = ShuffleServerMetrics.gaugeOnDiskDataSizeUsage;
     this.gaugeOnHadoopDataSize = ShuffleServerMetrics.gaugeOnHadoopDataSizeUsage;
-    this.scheduler = Executors.newScheduledThreadPool(1);
+    this.scheduler =
+        ThreadUtils.getDaemonSingleThreadScheduledExecutor(
+            ThreadUtils.getExceptionCatchingThreadFactory("topN-shuffleDataSize-calc"));
   }
 
   private void calcTopNShuffleDataSize() {
@@ -67,6 +74,22 @@ public class TopNShuffleDataSizeOfAppCalcTask {
       gaugeInMemoryDataSize
           .labels(taskInfo.getKey())
           .set(taskInfo.getValue().getInMemoryDataSize());
+    }
+
+    topNTaskInfo = calcTopNInMemoryBlockCountTaskInfo();
+    gaugeInMemoryBlockCount.clear();
+    for (Map.Entry<String, ShuffleTaskInfo> taskInfo : topNTaskInfo) {
+      gaugeInMemoryBlockCount
+          .labels(taskInfo.getKey())
+          .set(taskInfo.getValue().getInMemoryBlockCount());
+    }
+
+    topNTaskInfo = calcBottomNInMemoryAvgBlockSizeTaskInfo();
+    gaugeInMemoryAvgBlockSize.clear();
+    for (Map.Entry<String, ShuffleTaskInfo> taskInfo : topNTaskInfo) {
+      gaugeInMemoryAvgBlockSize
+          .labels(taskInfo.getKey())
+          .set(taskInfo.getValue().getInMemoryAvgBlockSize());
     }
 
     topNTaskInfo = calcTopNOnLocalFileDataSizeTaskInfo();
@@ -105,6 +128,27 @@ public class TopNShuffleDataSizeOfAppCalcTask {
         .collect(Collectors.toList());
   }
 
+  public List<Map.Entry<String, ShuffleTaskInfo>> calcTopNInMemoryBlockCountTaskInfo() {
+    return shuffleTaskManager.getShuffleTaskInfos().entrySet().stream()
+        .sorted(
+            (e1, e2) ->
+                Long.compare(
+                    e2.getValue().getInMemoryBlockCount(), e1.getValue().getInMemoryBlockCount()))
+        .limit(topNShuffleDataNumber)
+        .collect(Collectors.toList());
+  }
+
+  public List<Map.Entry<String, ShuffleTaskInfo>> calcBottomNInMemoryAvgBlockSizeTaskInfo() {
+    return shuffleTaskManager.getShuffleTaskInfos().entrySet().stream()
+        .sorted(
+            (e1, e2) ->
+                Long.compare(
+                    e1.getValue().getInMemoryAvgBlockSize(),
+                    e2.getValue().getInMemoryAvgBlockSize()))
+        .limit(topNShuffleDataNumber)
+        .collect(Collectors.toList());
+  }
+
   public List<Map.Entry<String, ShuffleTaskInfo>> calcTopNOnLocalFileDataSizeTaskInfo() {
     return shuffleTaskManager.getShuffleTaskInfos().entrySet().stream()
         .sorted(
@@ -127,7 +171,7 @@ public class TopNShuffleDataSizeOfAppCalcTask {
 
   public void start() {
     LOG.info("TopNShuffleDataSizeOfAppCalcTask start schedule.");
-    this.scheduler.scheduleAtFixedRate(
+    this.scheduler.scheduleWithFixedDelay(
         this::calcTopNShuffleDataSize,
         0,
         topNShuffleDataTaskRefreshInterval,

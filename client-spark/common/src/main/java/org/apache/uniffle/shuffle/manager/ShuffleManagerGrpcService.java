@@ -287,22 +287,23 @@ public class ShuffleManagerGrpcService extends ShuffleManagerImplBase {
   @Override
   public void getPartitionToShufflerServerWithBlockRetry(
       RssProtos.PartitionToShuffleServerRequest request,
-      StreamObserver<RssProtos.ReassignOnBlockSendFailureResponse> responseObserver) {
-    RssProtos.ReassignOnBlockSendFailureResponse reply;
+      StreamObserver<RssProtos.GetAssignmentForBlockRetryResponse> responseObserver) {
+    RssProtos.GetAssignmentForBlockRetryResponse reply;
     RssProtos.StatusCode code;
     int shuffleId = request.getShuffleId();
     MutableShuffleHandleInfo shuffleHandle =
         (MutableShuffleHandleInfo) shuffleManager.getShuffleHandleInfoByShuffleId(shuffleId);
     if (shuffleHandle != null) {
       code = RssProtos.StatusCode.SUCCESS;
-      reply =
-          RssProtos.ReassignOnBlockSendFailureResponse.newBuilder()
-              .setStatus(code)
-              .setHandle(MutableShuffleHandleInfo.toProto(shuffleHandle))
-              .build();
+      RssProtos.GetAssignmentForBlockRetryResponse.Builder builder =
+          RssProtos.GetAssignmentForBlockRetryResponse.newBuilder().setStatus(code);
+      if (shuffleHandle.isUpdated()) {
+        builder.setHandle(MutableShuffleHandleInfo.toProto(shuffleHandle));
+      }
+      reply = builder.build();
     } else {
       code = RssProtos.StatusCode.INVALID_REQUEST;
-      reply = RssProtos.ReassignOnBlockSendFailureResponse.newBuilder().setStatus(code).build();
+      reply = RssProtos.GetAssignmentForBlockRetryResponse.newBuilder().setStatus(code).build();
     }
     responseObserver.onNext(reply);
     responseObserver.onCompleted();
@@ -317,7 +318,7 @@ public class ShuffleManagerGrpcService extends ShuffleManagerImplBase {
     RssProtos.StatusCode code = RssProtos.StatusCode.INTERNAL_ERROR;
     RssProtos.ReassignOnBlockSendFailureResponse reply;
     try {
-      LOG.info(
+      LOG.debug(
           "Accepted reassign request on block sent failure for shuffleId: {}, stageId: {}, stageAttemptNumber: {} from taskAttemptId: {} on executorId: {} while partition split:{}",
           request.getShuffleId(),
           request.getStageId(),
@@ -361,6 +362,7 @@ public class ShuffleManagerGrpcService extends ShuffleManagerImplBase {
    */
   public void unregisterShuffle(int shuffleId) {
     shuffleStatus.remove(shuffleId);
+    shuffleWriteStatus.remove(shuffleId);
   }
 
   private static class ShuffleServerWriterFailureRecord {
@@ -735,7 +737,8 @@ public class ShuffleManagerGrpcService extends ShuffleManagerImplBase {
             ShuffleWriteTimes.fromProto(request.getShuffleWriteTimes()),
             request.getIsTaskWriteFailed(),
             request.getShuffleWriteFailureReason(),
-            request.getUncompressedByteSize());
+            request.getUncompressedByteSize(),
+            request.getTaskAttemptNumber());
     RssSparkShuffleUtils.getActiveSparkContext().listenerBus().post(event);
     RssProtos.ReportShuffleWriteMetricResponse reply =
         RssProtos.ReportShuffleWriteMetricResponse.newBuilder()
@@ -770,7 +773,8 @@ public class ShuffleManagerGrpcService extends ShuffleManagerImplBase {
                                 x.getValue().getHadoopByteSize()))),
             request.getIsTaskReadFailed(),
             request.getShuffleReadFailureReason(),
-            ShuffleReadTimes.fromProto(request.getShuffleReadTimes()));
+            ShuffleReadTimes.fromProto(request.getShuffleReadTimes()),
+            request.getTaskAttemptNumber());
     RssSparkShuffleUtils.getActiveSparkContext().listenerBus().post(event);
     RssProtos.ReportShuffleReadMetricResponse reply =
         RssProtos.ReportShuffleReadMetricResponse.newBuilder()

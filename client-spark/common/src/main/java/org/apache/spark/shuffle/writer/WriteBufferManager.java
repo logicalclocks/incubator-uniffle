@@ -36,6 +36,8 @@ import scala.reflect.ManifestFactory$;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.MemoryMode;
@@ -57,8 +59,6 @@ import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.exception.RssException;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.ChecksumUtils;
-
-import static org.apache.spark.shuffle.RssSparkConfig.RSS_WRITE_OVERLAPPING_COMPRESSION_ENABLED;
 
 public class WriteBufferManager extends MemoryConsumer {
 
@@ -111,7 +111,8 @@ public class WriteBufferManager extends MemoryConsumer {
   private Function<Integer, List<ShuffleServerInfo>> partitionAssignmentRetrieveFunc;
   private int stageAttemptNumber;
   private ShuffleServerPushCostTracker shuffleServerPushCostTracker;
-  private boolean overlappingCompressionEnabled;
+  // whether to use deferred compression for shuffle blocks
+  private final boolean isDeferredCompression;
 
   public WriteBufferManager(
       int shuffleId,
@@ -187,8 +188,7 @@ public class WriteBufferManager extends MemoryConsumer {
     this.requireMemoryInterval = bufferManagerOptions.getRequireMemoryInterval();
     this.requireMemoryRetryMax = bufferManagerOptions.getRequireMemoryRetryMax();
     this.arrayOutputStream = new WrappedByteArrayOutputStream(serializerBufferSize);
-    this.overlappingCompressionEnabled =
-        rssConf.getBoolean(RSS_WRITE_OVERLAPPING_COMPRESSION_ENABLED);
+    this.isDeferredCompression = OverlappingCompressionDataPusher.isEnabled(rssConf);
     // in columnar shuffle, the serializer here is never used
     this.isRowBased = rssConf.getBoolean(RssSparkConfig.RSS_ROW_BASED);
     if (isRowBased) {
@@ -251,8 +251,8 @@ public class WriteBufferManager extends MemoryConsumer {
 
     // check buffer size > spill threshold
     if (usedBytes.get() - inSendListBytes.get() > spillSize) {
-      LOG.info(
-          "ShuffleBufferManager spill for buffer size exceeding spill threshold, "
+      LOG.debug(
+          "Spill for buffer size exceeding spill threshold, "
               + "usedBytes[{}], inSendListBytes[{}], spill size threshold[{}]",
           usedBytes.get(),
           inSendListBytes.get(),
@@ -371,12 +371,13 @@ public class WriteBufferManager extends MemoryConsumer {
 
   // Gluten needs this method.
   public synchronized List<ShuffleBlockInfo> clear() {
-    return clear(bufferSpillRatio);
+    return clear(1.0);
   }
 
   // transform all [partition, records] to [partition, ShuffleBlockInfo] and clear cache
   public synchronized List<ShuffleBlockInfo> clear(double bufferSpillRatio) {
-    List<ShuffleBlockInfo> result = Lists.newArrayList();
+    final long startTime = System.currentTimeMillis();
+    List<ShuffleBlockInfo> flushBlocks = Lists.newArrayList();
     long dataSize = 0;
     long memoryUsed = 0;
 
@@ -400,7 +401,7 @@ public class WriteBufferManager extends MemoryConsumer {
       }
       dataSize += wb.getDataLength();
       memoryUsed += wb.getMemoryUsed();
-      result.add(createShuffleBlock(partitionId, wb));
+      flushBlocks.add(createShuffleBlock(partitionId, wb));
       recordCounter.addAndGet(wb.getRecordCount());
       copyTime += wb.getCopyTime();
       buffers.remove(partitionId);
@@ -409,27 +410,22 @@ public class WriteBufferManager extends MemoryConsumer {
         break;
       }
     }
-    LOG.info(
-        "Flush total buffer for shuffleId["
-            + shuffleId
-            + "] with allocated["
-            + allocatedBytes
-            + "], dataSize["
-            + dataSize
-            + "], memoryUsed["
-            + memoryUsed
-            + "], number of blocks["
-            + result.size()
-            + "], flush ratio["
-            + bufferSpillRatio
-            + "]");
-    return result;
+    LOG.debug(
+        "Pushed buffers into flushing queue in {} ms for taskAttemptId[{}], shuffleId[{}] with allocated[{}], dataSize[{}], memoryUsed[{}], blocks[{}], flushRatio[{}]",
+        System.currentTimeMillis() - startTime,
+        taskAttemptId,
+        shuffleId,
+        allocatedBytes,
+        dataSize,
+        memoryUsed,
+        flushBlocks.size(),
+        bufferSpillRatio);
+    return flushBlocks;
   }
 
   protected ShuffleBlockInfo createDeferredCompressedBlock(
       int partitionId, WriterBuffer writerBuffer) {
-    byte[] data = writerBuffer.getData();
-    final int uncompressLength = data.length;
+    final int uncompressLength = writerBuffer.getDataLength();
     final int memoryUsed = writerBuffer.getMemoryUsed();
 
     this.blockCounter.incrementAndGet();
@@ -439,12 +435,15 @@ public class WriteBufferManager extends MemoryConsumer {
     final long blockId =
         blockIdLayout.getBlockId(getNextSeqNo(partitionId), partitionId, taskAttemptId);
 
+    // todo: support ByteBuf compress directly to avoid copying
+    final byte[] rawData = writerBuffer.getData();
+
     Function<DeferredCompressedBlock, DeferredCompressedBlock> rebuildFunction =
         block -> {
-          byte[] compressed = data;
+          byte[] compressed = rawData;
           if (codec.isPresent()) {
             long start = System.currentTimeMillis();
-            compressed = codec.get().compress(data);
+            compressed = codec.get().compress(rawData);
             this.compressTime += System.currentTimeMillis() - start;
           }
           this.compressedDataLen += compressed.length;
@@ -455,9 +454,9 @@ public class WriteBufferManager extends MemoryConsumer {
           return block;
         };
 
-    int estimatedCompressedSize = data.length;
+    int estimatedCompressedSize = uncompressLength;
     if (codec.isPresent()) {
-      estimatedCompressedSize = codec.get().maxCompressedLength(data.length);
+      estimatedCompressedSize = codec.get().maxCompressedLength(uncompressLength);
     }
 
     return new DeferredCompressedBlock(
@@ -470,44 +469,49 @@ public class WriteBufferManager extends MemoryConsumer {
         taskAttemptId,
         partitionAssignmentRetrieveFunc,
         rebuildFunction,
-        estimatedCompressedSize);
+        estimatedCompressedSize,
+        writerBuffer.getRecordCount());
   }
 
   // transform records to shuffleBlock
   protected ShuffleBlockInfo createShuffleBlock(int partitionId, WriterBuffer wb) {
-    if (overlappingCompressionEnabled) {
+    if (isDeferredCompression) {
       return createDeferredCompressedBlock(partitionId, wb);
     }
 
-    byte[] data = wb.getData();
-    final int uncompressLength = data.length;
-    byte[] compressed = data;
+    final int uncompressLength = wb.getDataLength();
+    final ByteBuf data = wb.getDataAsByteBuf();
+    ByteBuf compressed = data;
     if (codec.isPresent()) {
       long start = System.currentTimeMillis();
-      compressed = codec.get().compress(data);
+      // todo: support ByteBuf compress directly to avoid copying
+      byte[] compressedByteArr = codec.get().compress(wb.getData());
+      compressed = Unpooled.wrappedBuffer(compressedByteArr);
       compressTime += System.currentTimeMillis() - start;
     }
     final long crc32 = ChecksumUtils.getCrc32(compressed);
     final long blockId =
         blockIdLayout.getBlockId(getNextSeqNo(partitionId), partitionId, taskAttemptId);
     blockCounter.incrementAndGet();
-    uncompressedDataLen += data.length;
-    compressedDataLen += compressed.length;
-    shuffleWriteMetrics.incBytesWritten(compressed.length);
+    final int compressedLen = compressed.readableBytes();
+    uncompressedDataLen += uncompressLength;
+    compressedDataLen += compressedLen;
+    shuffleWriteMetrics.incBytesWritten(compressedLen);
     // add memory to indicate bytes which will be sent to shuffle server
     inSendListBytes.addAndGet(wb.getMemoryUsed());
     return new ShuffleBlockInfo(
         shuffleId,
         partitionId,
         blockId,
-        compressed.length,
+        compressedLen,
         crc32,
         compressed,
         partitionAssignmentRetrieveFunc.apply(partitionId),
         uncompressLength,
         wb.getMemoryUsed(),
         taskAttemptId,
-        partitionAssignmentRetrieveFunc);
+        partitionAssignmentRetrieveFunc,
+        wb.getRecordCount());
   }
 
   // it's run in single thread, and is not thread safe
@@ -672,6 +676,11 @@ public class WriteBufferManager extends MemoryConsumer {
 
   protected long getRecordCount() {
     return recordCounter.get();
+  }
+
+  @VisibleForTesting
+  protected void resetRecordCount() {
+    recordCounter.set(0);
   }
 
   public long getBlockCount() {

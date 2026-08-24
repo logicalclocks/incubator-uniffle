@@ -26,10 +26,20 @@ import org.apache.uniffle.common.ShuffleReadTimes
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters.asScalaIteratorConverter
+import scala.collection.mutable
 
 class UniffleStatusStore(store: KVStore) {
   private def viewToSeq[T](view: KVStoreView[T]): Seq[T] = {
     Utils.tryWithResource(view.closeableIterator())(iter => iter.asScala.toList)
+  }
+
+  def shuffleTaskSummary(shuffleType: ShuffleType.Value): ShuffleTaskSummary = {
+    val kClass = classOf[ShuffleTaskSummary]
+    try {
+      store.read(kClass, s"${kClass.getName}_$shuffleType")
+    } catch {
+      case _: NoSuchElementException => new ShuffleTaskSummary(shuffleType = shuffleType)
+    }
   }
 
   def uniffleProperties(): UniffleProperties = {
@@ -55,7 +65,7 @@ class UniffleStatusStore(store: KVStore) {
     try {
       store.read(kClass, kClass.getName)
     } catch {
-      case _: NoSuchElementException => AggregatedShuffleReadTimesUIData(new ShuffleReadTimes())
+      case _: NoSuchElementException => AggregatedShuffleReadTimesUIData(new ShuffleReadTimesSummary())
     }
   }
 
@@ -64,7 +74,7 @@ class UniffleStatusStore(store: KVStore) {
     try {
       store.read(kClass, kClass.getName)
     } catch {
-      case _: NoSuchElementException => AggregatedShuffleWriteTimesUIData(new ShuffleWriteTimes())
+      case _: NoSuchElementException => AggregatedShuffleWriteTimesUIData(new ShuffleWriteTimesSummary())
     }
   }
 
@@ -168,13 +178,53 @@ case class AggregatedTaskInfoUIData(cpuTimeMillis: Long,
   def id: String = classOf[AggregatedTaskInfoUIData].getName()
 }
 
-case class AggregatedShuffleWriteTimesUIData(times: ShuffleWriteTimes) {
+case class ShuffleReadTimesSummary(var fetch: Long = 0,
+                                   var backgroundFetch: Long = 0,
+                                   var crc: Long = 0,
+                                   var copy: Long = 0,
+                                   var deserialize: Long = 0,
+                                   var decompress: Long = 0,
+                                   var backgroundDecompress: Long = 0,
+                                   var total: Long = 0) {
+  def inc(times: ShuffleReadTimes): Unit = {
+    if (times == null) return
+    this.total += times.getTotal
+    this.fetch += times.getFetch
+    this.crc += times.getCrc
+    this.copy += times.getCopy
+    this.deserialize += times.getDeserialize
+    this.decompress += times.getDecompress
+    this.backgroundDecompress += times.getBackgroundDecompress
+    this.backgroundFetch += times.getBackgroundFetch
+  }
+}
+
+case class ShuffleWriteTimesSummary(var copy: Long = 0,
+                                    var serialize: Long = 0,
+                                    var compress: Long = 0,
+                                    var sort: Long = 0,
+                                    var requireMemory: Long = 0,
+                                    var waitFinish: Long = 0,
+                                    var total: Long = 0) {
+  def inc(times: ShuffleWriteTimes): Unit = {
+    if (times == null) return
+    this.total += times.getTotal
+    this.copy += times.getCopy
+    this.serialize += times.getSerialize
+    this.compress += times.getCompress
+    this.sort += times.getSort
+    this.requireMemory += times.getRequireMemory
+    this.waitFinish += times.getWaitFinish
+  }
+}
+
+case class AggregatedShuffleWriteTimesUIData(times: ShuffleWriteTimesSummary) {
   @JsonIgnore
   @KVIndex
   def id: String = classOf[AggregatedShuffleWriteTimesUIData].getName()
 }
 
-case class AggregatedShuffleReadTimesUIData(times: ShuffleReadTimes) {
+case class AggregatedShuffleReadTimesUIData(times: ShuffleReadTimesSummary) {
   @JsonIgnore
   @KVIndex
   def id: String = classOf[AggregatedShuffleReadTimesUIData].getName()
@@ -184,4 +234,17 @@ case class ReassignInfoUIData(event: TaskReassignInfoEvent) {
   @JsonIgnore
   @KVIndex
   def id: String = classOf[ReassignInfoUIData].getName()
+}
+
+object ShuffleType extends Enumeration {
+  val READ, WRITE = Value
+}
+
+case class ShuffleTaskSummary(shuffleType: ShuffleType.Value,
+                              var failureReasons: mutable.HashSet[String] = new mutable.HashSet[String](),
+                              var failedTaskNumber: Long = -1,
+                              var failedTaskMaxAttemptNumber: Long = -1) {
+  @JsonIgnore
+  @KVIndex
+  def id: String = s"${classOf[ShuffleTaskSummary].getName}_${shuffleType.toString}"
 }

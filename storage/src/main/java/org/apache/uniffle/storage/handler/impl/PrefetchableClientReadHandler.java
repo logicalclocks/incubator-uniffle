@@ -31,6 +31,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.exception.RssException;
+import org.apache.uniffle.common.util.ThreadUtils;
+import org.apache.uniffle.storage.handler.ClientReadHandlerMetric;
 
 public abstract class PrefetchableClientReadHandler extends AbstractClientReadHandler {
   private static final Logger LOG = LoggerFactory.getLogger(PrefetchableClientReadHandler.class);
@@ -51,13 +53,15 @@ public abstract class PrefetchableClientReadHandler extends AbstractClientReadHa
       if (option.capacity <= 0) {
         throw new RssException("Illegal prefetch capacity: " + option.capacity);
       }
-      LOG.info("Prefetch is enabled, capacity: {}", option.capacity);
+      LOG.debug("Prefetch is enabled, capacity: {}", option.capacity);
       this.prefetchEnabled = true;
       this.prefetchQueueCapacity = option.capacity;
       this.prefetchTimeoutSec = option.timeoutSec;
       this.prefetchResultQueue = new LinkedBlockingQueue<>(option.capacity);
       // todo: support multi threads to prefetch
-      this.prefetchExecutors = Executors.newFixedThreadPool(1);
+      this.prefetchExecutors =
+          Executors.newFixedThreadPool(
+              1, ThreadUtils.getThreadFactory("PrefetchableClientReadHandler"));
       this.abnormalFetchTag = new AtomicBoolean(false);
       this.finishedTag = new AtomicBoolean(false);
       this.queueingNumber = new AtomicInteger(0);
@@ -75,6 +79,10 @@ public abstract class PrefetchableClientReadHandler extends AbstractClientReadHa
       this.capacity = capacity;
       this.timeoutSec = timeoutSec;
     }
+  }
+
+  public boolean isFinished() {
+    return finishedTag.get();
   }
 
   protected abstract ShuffleDataResult doReadShuffleData();
@@ -96,7 +104,7 @@ public abstract class PrefetchableClientReadHandler extends AbstractClientReadHa
                 return;
               }
               ShuffleDataResult result = doReadShuffleData();
-              if (result == null) {
+              if (result == null || result.isEmpty()) {
                 this.finishedTag.set(true);
               }
               prefetchResultQueue.offer(Optional.ofNullable(result));
@@ -144,13 +152,27 @@ public abstract class PrefetchableClientReadHandler extends AbstractClientReadHa
     }
   }
 
+  private long getBackgroundFetchTime() {
+    long fetch = 0;
+    if (fetchTime != null) {
+      fetch = fetchTime.get();
+    }
+    return fetch;
+  }
+
   @Override
   public void logConsumedBlockInfo() {
     LOG.info(
         "Metrics for shuffleId[{}], partitionId[{}], background fetch cost {} ms",
         shuffleId,
         partitionId,
-        fetchTime);
+        getBackgroundFetchTime());
     super.logConsumedBlockInfo();
+  }
+
+  @Override
+  public ClientReadHandlerMetric getReadHandlerMetric() {
+    readHandlerMetric.setPrefetchTime(getBackgroundFetchTime());
+    return readHandlerMetric;
   }
 }

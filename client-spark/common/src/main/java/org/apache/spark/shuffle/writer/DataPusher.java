@@ -30,9 +30,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.spark.shuffle.RssSparkConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,8 +44,9 @@ import org.apache.uniffle.client.impl.FailedBlockSendTracker;
 import org.apache.uniffle.client.response.SendShuffleDataResult;
 import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
+import org.apache.uniffle.common.config.RssClientConf;
+import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.exception.RssException;
-import org.apache.uniffle.common.rpc.StatusCode;
 import org.apache.uniffle.common.util.ThreadUtils;
 
 /**
@@ -64,13 +67,18 @@ public class DataPusher implements Closeable {
   // Must be thread safe
   private final Set<String> failedTaskIds;
 
+  // Whether to fast-switch for those stale assignment to avoid backpressure.
+  // This is only valid if partition-reassign is enabled and single replica is used.
+  private final boolean staleAssignmentFastSwitchEnabled;
+
   public DataPusher(
       ShuffleWriteClient shuffleWriteClient,
       Map<String, Set<Long>> taskToSuccessBlockIds,
       Map<String, FailedBlockSendTracker> taskToFailedBlockSendTracker,
       Set<String> failedTaskIds,
       int threadPoolSize,
-      int threadKeepAliveTime) {
+      int threadKeepAliveTime,
+      RssConf rssConf) {
     this.shuffleWriteClient = shuffleWriteClient;
     this.taskToSuccessBlockIds = taskToSuccessBlockIds;
     this.taskToFailedBlockSendTracker = taskToFailedBlockSendTracker;
@@ -83,6 +91,28 @@ public class DataPusher implements Closeable {
             TimeUnit.SECONDS,
             Queues.newLinkedBlockingQueue(Integer.MAX_VALUE),
             ThreadUtils.getThreadFactory(this.getClass().getName()));
+    this.staleAssignmentFastSwitchEnabled =
+        rssConf.get(RssClientConf.RSS_CLIENT_REASSIGN_ENABLED)
+            && rssConf.get(
+                RssSparkConfig.RSS_PARTITION_REASSIGN_STALE_ASSIGNMENT_FAST_SWITCH_ENABLED);
+  }
+
+  @VisibleForTesting
+  public DataPusher(
+      ShuffleWriteClient shuffleWriteClient,
+      Map<String, Set<Long>> taskToSuccessBlockIds,
+      Map<String, FailedBlockSendTracker> taskToFailedBlockSendTracker,
+      Set<String> failedTaskIds,
+      int threadPoolSize,
+      int threadKeepAliveTime) {
+    this(
+        shuffleWriteClient,
+        taskToSuccessBlockIds,
+        taskToFailedBlockSendTracker,
+        failedTaskIds,
+        threadPoolSize,
+        threadKeepAliveTime,
+        new RssConf());
   }
 
   public CompletableFuture<Long> send(AddBlockEvent event) {
@@ -92,25 +122,28 @@ public class DataPusher implements Closeable {
     return CompletableFuture.supplyAsync(
             () -> {
               String taskId = event.getTaskId();
-              List<ShuffleBlockInfo> shuffleBlockInfoList = event.getShuffleDataInfoList();
-              // filter out the shuffle blocks with stale assignment
-              List<ShuffleBlockInfo> validBlocks =
-                  filterOutStaleAssignmentBlocks(taskId, shuffleBlockInfoList);
-              if (CollectionUtils.isEmpty(validBlocks)) {
-                return 0L;
-              }
+              List<ShuffleBlockInfo> blocks = event.getShuffleDataInfoList();
+              List<ShuffleBlockInfo> validBlocks = filterOutStaleAssignmentBlocks(taskId, blocks);
 
               SendShuffleDataResult result = null;
               try {
-                result =
-                    shuffleWriteClient.sendShuffleData(
-                        rssAppId,
-                        event.getStageAttemptNumber(),
-                        validBlocks,
-                        () -> !isValidTask(taskId));
-                putBlockId(taskToSuccessBlockIds, taskId, result.getSuccessBlockIds());
-                putFailedBlockSendTracker(
-                    taskToFailedBlockSendTracker, taskId, result.getFailedBlockSendTracker());
+                if (CollectionUtils.isNotEmpty(validBlocks)) {
+                  result =
+                      shuffleWriteClient.sendShuffleData(
+                          rssAppId,
+                          event.getStageAttemptNumber(),
+                          validBlocks,
+                          () -> !isValidTask(taskId));
+                  // completionCallback should be executed before updating taskToSuccessBlockIds
+                  // structure to avoid side effect
+                  Set<Long> succeedBlockIds = getSucceedBlockIds(result);
+                  for (ShuffleBlockInfo block : validBlocks) {
+                    block.executeCompletionCallback(succeedBlockIds.contains(block.getBlockId()));
+                  }
+                  putBlockId(taskToSuccessBlockIds, taskId, result.getSuccessBlockIds());
+                  putFailedBlockSendTracker(
+                      taskToFailedBlockSendTracker, taskId, result.getFailedBlockSendTracker());
+                }
               } finally {
                 WriteBufferManager bufferManager = event.getBufferManager();
                 if (bufferManager != null && result != null) {
@@ -119,16 +152,14 @@ public class DataPusher implements Closeable {
                   bufferManager.merge(shuffleServerPushCostTracker);
                 }
 
-                Set<Long> succeedBlockIds = getSucceedBlockIds(result);
-                for (ShuffleBlockInfo block : validBlocks) {
-                  block.executeCompletionCallback(succeedBlockIds.contains(block.getBlockId()));
-                }
-
                 List<Runnable> callbackChain =
                     Optional.of(event.getProcessedCallbackChain()).orElse(Collections.EMPTY_LIST);
                 for (Runnable runnable : callbackChain) {
                   runnable.run();
                 }
+              }
+              if (CollectionUtils.isEmpty(validBlocks)) {
+                return 0L;
               }
               Set<Long> succeedBlockIds = getSucceedBlockIds(result);
               return validBlocks.stream()
@@ -156,6 +187,9 @@ public class DataPusher implements Closeable {
    */
   private List<ShuffleBlockInfo> filterOutStaleAssignmentBlocks(
       String taskId, List<ShuffleBlockInfo> blocks) {
+    if (!staleAssignmentFastSwitchEnabled) {
+      return blocks;
+    }
     FailedBlockSendTracker staleBlockTracker = new FailedBlockSendTracker();
     List<ShuffleBlockInfo> validBlocks = new ArrayList<>();
     for (ShuffleBlockInfo block : blocks) {
@@ -164,9 +198,11 @@ public class DataPusher implements Closeable {
       if (servers == null || servers.size() != 1) {
         validBlocks.add(block);
       } else {
+        ShuffleServerInfo server = servers.get(0);
         if (block.isStaleAssignment()) {
-          staleBlockTracker.add(
-              block, block.getShuffleServerInfos().get(0), StatusCode.INTERNAL_ERROR);
+          // It means the block failed due to the stale assignment fast-switch when status code is
+          // null.
+          staleBlockTracker.add(block, server, null);
         } else {
           validBlocks.add(block);
         }

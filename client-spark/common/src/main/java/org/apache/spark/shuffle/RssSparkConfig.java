@@ -31,6 +31,7 @@ import org.apache.spark.internal.config.ConfigEntry;
 import org.apache.spark.internal.config.TypedConfigBuilder;
 
 import org.apache.uniffle.client.util.RssClientConfig;
+import org.apache.uniffle.common.compression.Codec;
 import org.apache.uniffle.common.config.ConfigOption;
 import org.apache.uniffle.common.config.ConfigOptions;
 import org.apache.uniffle.common.config.ConfigUtils;
@@ -38,6 +39,47 @@ import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
 
 public class RssSparkConfig {
+
+  public static final ConfigOption<Boolean> RSS_CLIENT_INTEGRITY_VALIDATION_ENABLED =
+      ConfigOptions.key("rss.client.integrityValidation.enabled")
+          .booleanType()
+          .defaultValue(false)
+          .withDescription(
+              "Whether or not to enable shuffle data integrity validation mechanism (spark version >= 3.5.0)");
+
+  public static final ConfigOption<Boolean> RSS_DATA_INTEGRATION_VALIDATION_ANALYSIS_ENABLED =
+      ConfigOptions.key("rss.client.integrityValidation.failureAnalysisEnabled")
+          .booleanType()
+          .defaultValue(false)
+          .withDescription("Whether or not to enable validation failure analysis");
+
+  public static final ConfigOption<Boolean>
+      RSS_DATA_INTEGRITY_VALIDATION_BLOCK_NUMBER_CHECK_ENABLED =
+          ConfigOptions.key("rss.client.integrityValidation.blockNumberCheckEnabled")
+              .booleanType()
+              .defaultValue(false)
+              .withDescription("Whether or not to enable validation block number check");
+
+  public static final ConfigOption<Codec.Type>
+      RSS_CLIENT_INTEGRITY_VALIDATION_STATS_COMPRESSION_TYPE =
+          ConfigOptions.key("rss.client.integrityValidation.statsCompressionType")
+              .enumType(Codec.Type.class)
+              .defaultValue(Codec.Type.ZSTD)
+              .withDescription("stats compression type");
+
+  public static final ConfigOption<Boolean>
+      RSS_DATA_INTEGRITY_VALIDATION_SERVER_MANAGEMENT_ENABLED =
+          ConfigOptions.key("rss.client.integrityValidation.serverManagementEnabled")
+              .booleanType()
+              .defaultValue(false)
+              .withDescription(
+                  "Whether or not to enable validation management by shuffle-server rather than client side");
+
+  public static final ConfigOption<Boolean> RSS_READ_SHUFFLE_HANDLE_CACHE_ENABLED =
+      ConfigOptions.key("rss.client.read.shuffleHandleCacheEnabled")
+          .booleanType()
+          .defaultValue(false)
+          .withDescription("Whether or not to read shuffle handle cache enabled");
 
   public static final ConfigOption<Boolean> RSS_READ_OVERLAPPING_DECOMPRESSION_ENABLED =
       ConfigOptions.key("rss.client.read.overlappingDecompressionEnable")
@@ -147,6 +189,14 @@ public class RssSparkConfig {
           .intType()
           .defaultValue(1)
           .withDescription("The block retry max times when partition reassign is enabled.");
+
+  public static final ConfigOption<Boolean>
+      RSS_PARTITION_REASSIGN_STALE_ASSIGNMENT_FAST_SWITCH_ENABLED =
+          ConfigOptions.key("rss.client.reassign.staleAssignmentFastSwitchEnabled")
+              .booleanType()
+              .defaultValue(true)
+              .withDescription(
+                  "Whether to fast-switch the stale shuffle server assignment when pushing shuffle data. It can be enabled when partition reassign mechanism is enabled.");
 
   public static final ConfigOption<Boolean> RSS_CLIENT_MAP_SIDE_COMBINE_ENABLED =
       ConfigOptions.key("rss.client.mapSideCombine.enabled")

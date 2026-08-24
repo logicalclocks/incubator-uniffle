@@ -63,6 +63,7 @@ import org.apache.uniffle.common.netty.protocol.GetLocalShuffleIndexRequest;
 import org.apache.uniffle.common.netty.protocol.GetLocalShuffleIndexResponse;
 import org.apache.uniffle.common.netty.protocol.GetMemoryShuffleDataRequest;
 import org.apache.uniffle.common.netty.protocol.GetMemoryShuffleDataResponse;
+import org.apache.uniffle.common.netty.protocol.GetMemoryShuffleDataV2Response;
 import org.apache.uniffle.common.netty.protocol.GetSortedShuffleDataRequest;
 import org.apache.uniffle.common.netty.protocol.GetSortedShuffleDataResponse;
 import org.apache.uniffle.common.netty.protocol.RpcResponse;
@@ -298,17 +299,22 @@ public class ShuffleServerGrpcNettyClient extends ShuffleServerGrpcClient {
     }
     switch (rpcResponse.getStatusCode()) {
       case SUCCESS:
-        LOG.info(
+        LOG.debug(
             "GetInMemoryShuffleData size:{}(bytes) from {}:{} for {} cost:{}(ms)",
             getMemoryShuffleDataResponse.body().size(),
             host,
             nettyPort,
             requestInfo,
             System.currentTimeMillis() - start);
+        boolean isEnd = false;
+        if (getMemoryShuffleDataResponse instanceof GetMemoryShuffleDataV2Response) {
+          isEnd = ((GetMemoryShuffleDataV2Response) getMemoryShuffleDataResponse).isEnd();
+        }
         return new RssGetInMemoryShuffleDataResponse(
             StatusCode.SUCCESS,
             getMemoryShuffleDataResponse.body(),
-            getMemoryShuffleDataResponse.getBufferSegments());
+            getMemoryShuffleDataResponse.getBufferSegments(),
+            isEnd);
       default:
         String msg =
             "Can't get shuffle in memory data from "
@@ -358,7 +364,7 @@ public class ShuffleServerGrpcNettyClient extends ShuffleServerGrpcClient {
     }
     switch (rpcResponse.getStatusCode()) {
       case SUCCESS:
-        LOG.info(
+        LOG.debug(
             "GetShuffleIndex size:{}(bytes) from {}:{} for {} cost:{}(ms)",
             getLocalShuffleIndexResponse.body().size(),
             host,
@@ -456,7 +462,7 @@ public class ShuffleServerGrpcNettyClient extends ShuffleServerGrpcClient {
     }
     switch (rpcResponse.getStatusCode()) {
       case SUCCESS:
-        LOG.info(
+        LOG.debug(
             "GetShuffleData size:{}(bytes) from {}:{} for {} cost:{}(ms)",
             getLocalShuffleDataResponse.body().size(),
             host,

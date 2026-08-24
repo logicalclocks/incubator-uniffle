@@ -23,12 +23,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.shuffle.RssSparkConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.uniffle.client.api.ShuffleWriteClient;
 import org.apache.uniffle.client.impl.FailedBlockSendTracker;
+import org.apache.uniffle.common.compression.Codec;
+import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.exception.RssException;
 import org.apache.uniffle.common.util.ThreadUtils;
 
@@ -47,14 +50,16 @@ public class OverlappingCompressionDataPusher extends DataPusher {
       Set<String> failedTaskIds,
       int threadPoolSize,
       int threadKeepAliveTime,
-      int compressionThreads) {
+      int compressionThreads,
+      RssConf rssConf) {
     super(
         shuffleWriteClient,
         taskToSuccessBlockIds,
         taskToFailedBlockSendTracker,
         failedTaskIds,
         threadPoolSize,
-        threadKeepAliveTime);
+        threadKeepAliveTime,
+        rssConf);
     if (compressionThreads <= 0) {
       throw new RssException(
           "Invalid rss configuration of "
@@ -65,6 +70,26 @@ public class OverlappingCompressionDataPusher extends DataPusher {
     this.compressionThreadPool =
         Executors.newFixedThreadPool(
             compressionThreads, ThreadUtils.getThreadFactory("compression-thread"));
+  }
+
+  @VisibleForTesting
+  public OverlappingCompressionDataPusher(
+      ShuffleWriteClient shuffleWriteClient,
+      Map<String, Set<Long>> taskToSuccessBlockIds,
+      Map<String, FailedBlockSendTracker> taskToFailedBlockSendTracker,
+      Set<String> failedTaskIds,
+      int threadPoolSize,
+      int threadKeepAliveTime,
+      int compressionThreads) {
+    this(
+        shuffleWriteClient,
+        taskToSuccessBlockIds,
+        taskToFailedBlockSendTracker,
+        failedTaskIds,
+        threadPoolSize,
+        threadKeepAliveTime,
+        compressionThreads,
+        new RssConf());
   }
 
   @Override
@@ -81,5 +106,18 @@ public class OverlappingCompressionDataPusher extends DataPusher {
               // Step 2: forward to the parent class's send method
               return super.send(processedEvent);
             });
+  }
+
+  public static boolean isEnabled(RssConf rssConf) {
+    boolean overlappingCompressionEnabled =
+        rssConf.get(RssSparkConfig.RSS_WRITE_OVERLAPPING_COMPRESSION_ENABLED);
+    int overlappingCompressionThreadsPerVcore =
+        rssConf.get(RssSparkConfig.RSS_WRITE_OVERLAPPING_COMPRESSION_THREADS_PER_VCORE);
+    if (Codec.hasCodec(rssConf)
+        && overlappingCompressionEnabled
+        && overlappingCompressionThreadsPerVcore > 0) {
+      return true;
+    }
+    return false;
   }
 }

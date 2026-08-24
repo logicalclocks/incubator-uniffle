@@ -27,7 +27,6 @@ import java.util.stream.Collectors;
 
 import com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,12 +53,13 @@ public class ShuffleTaskInfo {
 
   private Map<Integer, Object> commitLocks;
   /** shuffleId -> blockIds */
-  private Map<Integer, Roaring64NavigableMap> cachedBlockIds;
+  private Map<Integer, AtomicLong> cachedBlockCount;
 
   private AtomicReference<String> user;
 
   private final AtomicLong totalDataSize = new AtomicLong(0);
   private final AtomicLong inMemoryDataSize = new AtomicLong(0);
+  private final AtomicLong inMemoryBlockCount = new AtomicLong(0);
   private final AtomicLong onLocalFileNum = new AtomicLong(0);
   private final AtomicLong onLocalFileDataSize = new AtomicLong(0);
   private final AtomicLong onHadoopFileNum = new AtomicLong(0);
@@ -90,7 +90,7 @@ public class ShuffleTaskInfo {
     this.currentTimes = System.currentTimeMillis();
     this.commitCounts = JavaUtils.newConcurrentMap();
     this.commitLocks = JavaUtils.newConcurrentMap();
-    this.cachedBlockIds = JavaUtils.newConcurrentMap();
+    this.cachedBlockCount = JavaUtils.newConcurrentMap();
     this.user = new AtomicReference<>();
     this.partitionDataSizes = JavaUtils.newConcurrentMap();
     this.hugePartitionTags = JavaUtils.newConcurrentMap();
@@ -117,8 +117,8 @@ public class ShuffleTaskInfo {
     return commitLocks;
   }
 
-  public Map<Integer, Roaring64NavigableMap> getCachedBlockIds() {
-    return cachedBlockIds;
+  public Map<Integer, AtomicLong> getCachedBlockCount() {
+    return cachedBlockCount;
   }
 
   public String getUser() {
@@ -174,6 +174,19 @@ public class ShuffleTaskInfo {
 
   public long getInMemoryDataSize() {
     return inMemoryDataSize.get();
+  }
+
+  public long getInMemoryBlockCount() {
+    return inMemoryBlockCount.get();
+  }
+
+  public void addInMemoryBlockCount(long delta) {
+    inMemoryBlockCount.addAndGet(delta);
+  }
+
+  public long getInMemoryAvgBlockSize() {
+    long blockCount = getInMemoryBlockCount();
+    return blockCount <= 0 ? Long.MAX_VALUE : getInMemoryDataSize() / blockCount;
   }
 
   public long addOnLocalFileDataSize(long delta, boolean isNewlyCreated) {

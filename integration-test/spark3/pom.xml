@@ -131,13 +131,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>net.jpountz.lz4</groupId>
-            <artifactId>lz4</artifactId>
+            <groupId>org.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-minicluster</artifactId>
+            <artifactId>${hadoop.artifact.minicluster}</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>

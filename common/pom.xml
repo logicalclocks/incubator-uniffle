@@ -83,8 +83,8 @@
       <artifactId>RoaringBitmap</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -104,7 +104,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>${hadoop.artifact.core}</artifactId>
       <exclusions>
         <exclusion>
           <groupId>com.google.protobuf</groupId>
@@ -136,7 +136,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-minicluster</artifactId>
+      <artifactId>${hadoop.artifact.minicluster}</artifactId>
       <exclusions>
         <exclusion>
           <groupId>org.slf4j</groupId>

@@ -31,8 +31,11 @@ import scala.collection.JavaConverters.mapAsScalaMapConverter
 class UniffleListener(conf: SparkConf, kvstore: ElementTrackingStore)
   extends SparkListener with Logging {
 
-  private val aggregatedShuffleReadTimes = new ShuffleReadTimes()
-  private val aggregatedShuffleWriteTimes = new ShuffleWriteTimes()
+  private val writeTaskInfo = ShuffleTaskSummary(shuffleType = ShuffleType.WRITE)
+  private val readTaskInfo = ShuffleTaskSummary(shuffleType = ShuffleType.READ)
+
+  private val aggregatedShuffleReadTimes = ShuffleReadTimesSummary()
+  private val aggregatedShuffleWriteTimes = ShuffleWriteTimesSummary()
   private val aggregatedShuffleWriteMetric = new ConcurrentHashMap[String, AggregatedShuffleWriteMetric]
   private val aggregatedShuffleReadMetric = new ConcurrentHashMap[String, AggregatedShuffleReadMetric]
 
@@ -70,6 +73,8 @@ class UniffleListener(conf: SparkConf, kvstore: ElementTrackingStore)
       kvstore.write(
         AggregatedShuffleReadTimesUIData(aggregatedShuffleReadTimes)
       )
+      kvstore.write(writeTaskInfo)
+      kvstore.write(readTaskInfo)
     }
   }
 
@@ -122,6 +127,15 @@ class UniffleListener(conf: SparkConf, kvstore: ElementTrackingStore)
     }
     aggregatedShuffleWriteTimes.inc(event.getWriteTimes)
     totalUncompressedShuffleBytes.addAndGet(event.getUncompressedByteSize)
+
+    val failureReason = event.getFailureReason
+    if (StringUtils.isNotEmpty(failureReason)) {
+      writeTaskInfo.failureReasons.add(failureReason)
+      writeTaskInfo.failedTaskNumber += 1
+      if (event.getTaskAttemptNumber > writeTaskInfo.failedTaskMaxAttemptNumber) {
+        writeTaskInfo.failedTaskMaxAttemptNumber = event.getTaskAttemptNumber
+      }
+    }
   }
 
   private def onTaskShuffleReadInfo(event: TaskShuffleReadInfoEvent): Unit = {
@@ -142,7 +156,16 @@ class UniffleListener(conf: SparkConf, kvstore: ElementTrackingStore)
       agg_metric.hadoopByteSize += rmetric.getHadoopByteSize
       agg_metric.hadoopDurationMillis += rmetric.getHadoopDurationMillis
     }
-    aggregatedShuffleReadTimes.merge(event.getShuffleReadTimes)
+    aggregatedShuffleReadTimes.inc(event.getShuffleReadTimes)
+
+    val failureReason = event.getFailureReason
+    if (StringUtils.isNotEmpty(failureReason)) {
+      readTaskInfo.failureReasons.add(failureReason)
+      readTaskInfo.failedTaskNumber += 1
+      if (event.getTaskAttemptNumber > readTaskInfo.failedTaskMaxAttemptNumber) {
+        readTaskInfo.failedTaskMaxAttemptNumber = event.getTaskAttemptNumber
+      }
+    }
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {

@@ -247,7 +247,9 @@ public class GetShuffleReportForMultiPartTest extends SparkIntegrationTestBase {
         int endPartition,
         TaskContext context,
         ShuffleReadMetricsReporter metrics,
-        Roaring64NavigableMap taskIdBitmap) {
+        Roaring64NavigableMap taskIdBitmap,
+        long expectedRecordsRead,
+        long retrievedMillis) {
       int shuffleId = handle.shuffleId();
       RssShuffleHandle<?, ?, ?> rssShuffleHandle = (RssShuffleHandle<?, ?, ?>) handle;
       Map<Integer, List<ShuffleServerInfo>> allPartitionToServers =
@@ -268,7 +270,9 @@ public class GetShuffleReportForMultiPartTest extends SparkIntegrationTestBase {
           endPartition,
           context,
           metrics,
-          taskIdBitmap);
+          taskIdBitmap,
+          expectedRecordsRead,
+          retrievedMillis);
     }
 
     public Map<Integer, AtomicInteger> getShuffleIdToPartitionNum() {

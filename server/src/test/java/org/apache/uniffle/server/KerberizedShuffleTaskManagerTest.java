@@ -30,6 +30,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 
 import org.apache.uniffle.common.KerberizedHadoopBase;
 import org.apache.uniffle.common.PartitionRange;
@@ -47,6 +48,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@DisabledIfSystemProperty(
+    named = "uniffle.test.skip.kerberos",
+    matches = "true",
+    disabledReason = "MiniKdc is not compatible with JDK 17+")
 public class KerberizedShuffleTaskManagerTest extends KerberizedHadoopBase {
 
   private static final AtomicInteger ATOMIC_INT = new AtomicInteger(0);
@@ -134,9 +139,9 @@ public class KerberizedShuffleTaskManagerTest extends KerberizedHadoopBase {
     shuffleTaskManager.requireBuffer(35);
     shuffleTaskManager.requireBuffer(35);
     shuffleTaskManager.cacheShuffleData(appId, 0, false, partitionedData0);
-    shuffleTaskManager.updateCachedBlockIds(appId, 0, partitionedData0.getBlockList());
+    shuffleTaskManager.updateCachedBlockIds(appId, 0, partitionedData0);
     shuffleTaskManager.cacheShuffleData(appId, 1, false, partitionedData0);
-    shuffleTaskManager.updateCachedBlockIds(appId, 1, partitionedData0.getBlockList());
+    shuffleTaskManager.updateCachedBlockIds(appId, 1, partitionedData0);
     shuffleTaskManager.refreshAppId(appId);
     shuffleTaskManager.checkResourceStatus();
 

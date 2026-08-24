@@ -53,12 +53,16 @@ import org.apache.uniffle.common.util.ChecksumUtils;
 import org.apache.uniffle.common.util.IdHelper;
 import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.storage.factory.ShuffleHandlerFactory;
+import org.apache.uniffle.storage.handler.ClientReadHandlerMetric;
 import org.apache.uniffle.storage.handler.api.ClientReadHandler;
+import org.apache.uniffle.storage.handler.impl.AbstractClientReadHandler;
 import org.apache.uniffle.storage.handler.impl.ShuffleServerReadCostTracker;
 import org.apache.uniffle.storage.request.CreateShuffleReadHandlerRequest;
 
 import static org.apache.uniffle.common.config.RssClientConf.READ_CLIENT_NEXT_SEGMENTS_REPORT_COUNT;
 import static org.apache.uniffle.common.config.RssClientConf.READ_CLIENT_NEXT_SEGMENTS_REPORT_ENABLED;
+import static org.apache.uniffle.common.config.RssClientConf.RSS_READ_OVERLAPPING_DECOMPRESSION_FETCH_SECONDS_THRESHOLD;
+import static org.apache.uniffle.common.config.RssClientConf.RSS_READ_OVERLAPPING_DECOMPRESSION_MAX_CONCURRENT_SEGMENTS;
 
 public class ShuffleReadClientImpl implements ShuffleReadClient {
 
@@ -160,9 +164,16 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
 
   private void init(ShuffleClientFactory.ReadClientBuilder builder) {
     if (builder.isOverlappingDecompressionEnabled()) {
+      int fetchThreshold =
+          builder.getRssConf().get(RSS_READ_OVERLAPPING_DECOMPRESSION_FETCH_SECONDS_THRESHOLD);
+      int maxSegments =
+          builder.getRssConf().get(RSS_READ_OVERLAPPING_DECOMPRESSION_MAX_CONCURRENT_SEGMENTS);
       this.decompressionWorker =
           new DecompressionWorker(
-              builder.getCodec(), builder.getOverlappingDecompressionThreadNum());
+              builder.getCodec(),
+              builder.getOverlappingDecompressionThreadNum(),
+              fetchThreshold,
+              maxSegments);
     }
     this.shuffleId = builder.getShuffleId();
     this.partitionId = builder.getPartitionId();
@@ -286,6 +297,11 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
             if (shuffleServerInfoList.size() > 1) {
               LOG.warn(errMsg);
               clientReadHandler.updateConsumedBlockInfo(bs, true);
+              if (decompressionWorker != null) {
+                decompressionWorker.get(batchIndex - 1, segmentIndex++);
+              } else {
+                segmentIndex += 1;
+              }
               continue;
             } else {
               throw new RssFetchFailedException(errMsg);
@@ -303,6 +319,16 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
         // mark block as processed
         processedBlockIds.add(bs.getBlockId());
         pendingBlockIds.removeLong(bs.getBlockId());
+
+        // update the segment index to skip the unnecessary block in overlapping decompression mode.
+        // In overlapping decompression mode, decompression tasks for the whole batch have already
+        // been submitted. If we skip a segment without removing the corresponding handler, the
+        // backpressure permits may never be released, which can block subsequent decompression.
+        if (decompressionWorker != null) {
+          decompressionWorker.get(batchIndex - 1, segmentIndex++);
+        } else {
+          segmentIndex += 1;
+        }
       }
 
       if (bs != null) {
@@ -310,7 +336,8 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
           ByteBuffer compressedBuffer = readBuffer.duplicate();
           compressedBuffer.position(bs.getOffset());
           compressedBuffer.limit(bs.getOffset() + bs.getLength());
-          return new CompressedShuffleBlock(compressedBuffer, bs.getUncompressLength());
+          return new CompressedShuffleBlock(
+              compressedBuffer, bs.getUncompressLength(), bs.getTaskAttemptId(), bs.getLength());
         } else {
           DecompressedShuffleBlock block = decompressionWorker.get(batchIndex - 1, segmentIndex++);
           if (block == null) {
@@ -341,14 +368,14 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
       sdr = null;
     }
     final ShuffleDataResult shuffleDataResult = clientReadHandler.readShuffleData();
-    if (decompressionWorker != null) {
-      decompressionWorker.add(batchIndex++, shuffleDataResult);
-      segmentIndex = 0;
-    }
     sdr = shuffleDataResult;
     readDataTime.addAndGet(System.currentTimeMillis() - start);
     if (sdr == null) {
       return 0;
+    }
+    if (decompressionWorker != null) {
+      decompressionWorker.add(batchIndex++, shuffleDataResult);
+      segmentIndex = 0;
     }
     readBuffer = sdr.getDataBuffer();
     if (readBuffer == null || readBuffer.capacity() == 0) {
@@ -396,6 +423,23 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
 
   @Override
   public ShuffleReadTimes getShuffleReadTimes() {
-    return new ShuffleReadTimes(readDataTime.get(), copyTime.get(), crcCheckTime.get());
+    long backgroundDecompressionTime = 0;
+    if (decompressionWorker != null) {
+      backgroundDecompressionTime = decompressionWorker.decompressionMillis();
+    }
+
+    long backgroundFetchTime = 0;
+    if (clientReadHandler instanceof AbstractClientReadHandler) {
+      ClientReadHandlerMetric metric =
+          ((AbstractClientReadHandler) clientReadHandler).getReadHandlerMetric();
+      backgroundFetchTime += metric.getPrefetchTime();
+    }
+
+    return new ShuffleReadTimes(
+        readDataTime.get(),
+        crcCheckTime.get(),
+        copyTime.get(),
+        backgroundDecompressionTime,
+        backgroundFetchTime);
   }
 }

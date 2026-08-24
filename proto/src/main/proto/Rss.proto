@@ -116,6 +116,7 @@ message GetMemoryShuffleDataResponse {
   bytes data = 2;
   StatusCode status = 3;
   string retMsg = 4;
+  google.protobuf.BoolValue is_end = 5;
 }
 
 message GetLocalShuffleIndexRequest {
@@ -140,6 +141,7 @@ message ReportShuffleResultRequest {
   int64 taskAttemptId = 3;
   int32 bitmapNum = 4;
   repeated PartitionToBlockIds partitionToBlockIds = 5;
+  repeated PartitionStats partitionStats = 6;
 }
 
 message PartitionToBlockIds {
@@ -182,6 +184,17 @@ message GetShuffleResultForMultiPartResponse {
   StatusCode status = 1;
   string retMsg = 2;
   bytes serializedBitmap = 3;
+  repeated PartitionStats partitionStats = 4;
+}
+
+message PartitionStats {
+  int32 partitionId = 1;
+  repeated TaskAttemptIdToRecords taskAttemptIdToRecords = 2;
+}
+
+message TaskAttemptIdToRecords {
+  int64 taskAttemptId = 1;
+  int64 recordNumber = 2;
 }
 
 message ShufflePartitionRange {
@@ -350,6 +363,7 @@ enum StatusCode {
   EXCEED_HUGE_PARTITION_HARD_LIMIT = 12;
   APP_NOT_FOUND = 13;
   INTERNAL_NOT_RETRY_ERROR = 14;
+  HARD_SPLIT_FROM_SERVER = 15;
   // add more status
 }
 
@@ -578,7 +592,7 @@ service ShuffleManager {
   // Gets the mapping between partitions and ShuffleServer from the ShuffleManager server on Stage Retry.
   rpc getPartitionToShufflerServerWithStageRetry(PartitionToShuffleServerRequest) returns (ReassignOnStageRetryResponse);
   // Gets the mapping between partitions and ShuffleServer from the ShuffleManager server on Block Retry.
-  rpc getPartitionToShufflerServerWithBlockRetry(PartitionToShuffleServerRequest) returns (ReassignOnBlockSendFailureResponse);
+  rpc getPartitionToShufflerServerWithBlockRetry(PartitionToShuffleServerRequest) returns (GetAssignmentForBlockRetryResponse);
   // Report write failures to ShuffleManager
   rpc reportShuffleWriteFailure (ReportShuffleWriteFailureRequest) returns (ReportShuffleWriteFailureResponse);
   // Reassign on block send failure that occurs in writer
@@ -600,6 +614,7 @@ message ReportShuffleWriteMetricRequest {
   bool isTaskWriteFailed = 6;
   string shuffleWriteFailureReason = 7;
   int64 uncompressedByteSize = 8;
+  int64 taskAttemptNumber = 9;
 }
 
 message ShuffleWriteTimes {
@@ -648,6 +663,7 @@ message ReportShuffleReadMetricRequest {
   bool isTaskReadFailed = 5;
   string shuffleReadFailureReason = 6;
   ShuffleReadTimes shuffleReadTimes = 7;
+  int64 taskAttemptNumber = 8;
 }
 
 message ShuffleReadTimes {
@@ -656,6 +672,8 @@ message ShuffleReadTimes {
   int64 copy = 3;
   int64 deserialize = 4;
   int64 decompress = 5;
+  int64 backgroundDecompress = 6;
+  int64 backgroundFetch = 7;
 }
 
 message ReportShuffleReadMetricResponse {
@@ -781,6 +799,12 @@ message ReassignOnBlockSendFailureResponse {
   StatusCode status = 1;
   string msg = 2;
   MutableShuffleHandleInfo handle = 3;
+}
+
+message GetAssignmentForBlockRetryResponse {
+  StatusCode status = 1;
+  string msg = 2;
+  optional MutableShuffleHandleInfo handle = 3;
 }
 
 message StartSortMergeRequest {

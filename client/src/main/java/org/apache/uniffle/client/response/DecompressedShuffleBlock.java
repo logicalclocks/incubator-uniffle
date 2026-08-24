@@ -19,26 +19,53 @@ package org.apache.uniffle.client.response;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import org.apache.uniffle.common.exception.RssException;
 
-public class DecompressedShuffleBlock implements ShuffleBlock {
+public class DecompressedShuffleBlock extends ShuffleBlock {
   private CompletableFuture<ByteBuffer> f;
+  private Consumer<Long> waitMillisCallback;
+  private final int fetchSecondsThreshold;
+  private final int compressedLength;
+  private final int uncompressedLength;
 
-  public DecompressedShuffleBlock(CompletableFuture<ByteBuffer> f) {
+  public DecompressedShuffleBlock(
+      CompletableFuture<ByteBuffer> f,
+      Consumer<Long> consumer,
+      long taskAttemptId,
+      int fetchSecondsThreshold,
+      int compressedLength,
+      int uncompressedLength) {
+    super(taskAttemptId);
     this.f = f;
+    this.waitMillisCallback = consumer;
+    this.fetchSecondsThreshold = fetchSecondsThreshold;
+    this.compressedLength = compressedLength;
+    this.uncompressedLength = uncompressedLength;
+  }
+
+  @Override
+  public int getCompressedLength() {
+    return compressedLength;
   }
 
   @Override
   public int getUncompressLength() {
-    ByteBuffer buffer = getByteBuffer();
-    return buffer.limit() - buffer.position();
+    return uncompressedLength;
   }
 
   @Override
   public ByteBuffer getByteBuffer() {
     try {
-      return f.get();
+      long startTime = System.currentTimeMillis();
+      ByteBuffer buffer =
+          fetchSecondsThreshold > 0 ? f.get(fetchSecondsThreshold, TimeUnit.SECONDS) : f.get();
+      if (waitMillisCallback != null) {
+        waitMillisCallback.accept(System.currentTimeMillis() - startTime);
+      }
+      return buffer;
     } catch (Exception e) {
       throw new RssException(e);
     }
