@@ -16,7 +16,7 @@
 #
 
 # this docker file serves the rss server base image for CentOS/RedHat distributions
-ARG BASE_IMAGE=eclipse-temurin:11-jdk-centos7
+ARG BASE_IMAGE=eclipse-temurin:17-jdk-centos7
 FROM ${BASE_IMAGE}
 
 # Update the CentOS repository configuration

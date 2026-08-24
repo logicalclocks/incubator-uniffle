@@ -23,6 +23,10 @@ public class ShuffleAssignmentInfoEvent extends UniffleEvent {
   private int shuffleId;
   private List<String> assignedServers;
 
+  // no-arg constructor and setters are required by Jackson to deserialize
+  // this event from the event log when the history server replays it
+  public ShuffleAssignmentInfoEvent() {}
+
   public ShuffleAssignmentInfoEvent(int shuffleId, List<String> assignedServers) {
     this.shuffleId = shuffleId;
     this.assignedServers = assignedServers;
@@ -32,7 +36,15 @@ public class ShuffleAssignmentInfoEvent extends UniffleEvent {
     return shuffleId;
   }
 
+  public void setShuffleId(int shuffleId) {
+    this.shuffleId = shuffleId;
+  }
+
   public List<String> getAssignedServers() {
     return assignedServers;
+  }
+
+  public void setAssignedServers(List<String> assignedServers) {
+    this.assignedServers = assignedServers;
   }
 }

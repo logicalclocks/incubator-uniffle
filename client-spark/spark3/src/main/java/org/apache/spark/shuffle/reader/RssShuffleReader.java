@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.reader;
 
+import java.lang.reflect.Constructor;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -172,9 +173,7 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
               Option.apply((Aggregator<K, Object, C>) shuffleDependency.aggregator().get());
         }
       }
-      ExternalSorter<K, Object, C> sorter =
-          new ExternalSorter<>(
-              context, aggregator, Option.empty(), shuffleDependency.keyOrdering(), serializer);
+      ExternalSorter<K, Object, C> sorter = createExternalSorter(aggregator);
       LOG.info("Inserting aggregated records to sorter");
       long startTime = System.currentTimeMillis();
       sorter.insertAll(rssShuffleDataIterator);
@@ -422,6 +421,35 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
           LOG.error("Errors on post shuffle read metric to driver", e);
         }
       }
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private ExternalSorter<K, Object, C> createExternalSorter(
+      Option<Aggregator<K, Object, C>> aggregator) {
+    try {
+      for (Constructor<?> constructor : ExternalSorter.class.getConstructors()) {
+        if (constructor.getParameterCount() == 6) {
+          Object checksumConfig =
+              ExternalSorter.class.getMethod("$lessinit$greater$default$6").invoke(null);
+          return (ExternalSorter<K, Object, C>)
+              constructor.newInstance(
+                  context,
+                  aggregator,
+                  Option.empty(),
+                  shuffleDependency.keyOrdering(),
+                  serializer,
+                  checksumConfig);
+        }
+        if (constructor.getParameterCount() == 5) {
+          return (ExternalSorter<K, Object, C>)
+              constructor.newInstance(
+                  context, aggregator, Option.empty(), shuffleDependency.keyOrdering(), serializer);
+        }
+      }
+      throw new NoSuchMethodException("No compatible ExternalSorter constructor found");
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Failed to create ExternalSorter", e);
     }
   }
 }
