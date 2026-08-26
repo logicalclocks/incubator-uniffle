@@ -126,6 +126,27 @@
     <scala.version>2.12.18</scala.version>
     <scala.maven.plugin.version>3.2.2</scala.maven.plugin.version>
     <extraJavaTestArgs/>
+    <!-- Java 17 encapsulates the internals that Spark, Kryo and Hadoop reflect on, so tests need
+         these opened regardless of which Spark profile is in play. Kept in one place and applied
+         by the java-module-test-args profile below, rather than only by the spark4 profiles. -->
+    <javaModuleTestArgs>
+      -XX:+IgnoreUnrecognizedVMOptions
+      --add-opens=java.base/java.lang=ALL-UNNAMED
+      --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+      --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+      --add-opens=java.base/java.io=ALL-UNNAMED
+      --add-opens=java.base/java.net=ALL-UNNAMED
+      --add-opens=java.base/java.nio=ALL-UNNAMED
+      --add-opens=java.base/java.util=ALL-UNNAMED
+      --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+      --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+      --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+      --add-opens=java.base/sun.security.action=ALL-UNNAMED
+      --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+      --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
+      -Djdk.reflect.useDirectMethodHandle=false
+      -Duniffle.test.skip.kerberos=true
+    </javaModuleTestArgs>
   </properties>
 
   <repositories>
@@ -2050,24 +2071,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <commons-lang3.version>3.17.0</commons-lang3.version>
-        <extraJavaTestArgs>
-          -XX:+IgnoreUnrecognizedVMOptions
-          --add-opens=java.base/java.lang=ALL-UNNAMED
-          --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
-          --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
-          --add-opens=java.base/java.io=ALL-UNNAMED
-          --add-opens=java.base/java.net=ALL-UNNAMED
-          --add-opens=java.base/java.nio=ALL-UNNAMED
-          --add-opens=java.base/java.util=ALL-UNNAMED
-          --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
-          --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
-          --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
-          --add-opens=java.base/sun.security.action=ALL-UNNAMED
-          --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-          --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
-          -Djdk.reflect.useDirectMethodHandle=false
-          -Duniffle.test.skip.kerberos=true
-        </extraJavaTestArgs>
+        <extraJavaTestArgs>${javaModuleTestArgs}</extraJavaTestArgs>
       </properties>
       <modules>
         <module>client-spark/common</module>
@@ -2225,24 +2229,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <commons-lang3.version>3.17.0</commons-lang3.version>
-        <extraJavaTestArgs>
-          -XX:+IgnoreUnrecognizedVMOptions
-          --add-opens=java.base/java.lang=ALL-UNNAMED
-          --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
-          --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
-          --add-opens=java.base/java.io=ALL-UNNAMED
-          --add-opens=java.base/java.net=ALL-UNNAMED
-          --add-opens=java.base/java.nio=ALL-UNNAMED
-          --add-opens=java.base/java.util=ALL-UNNAMED
-          --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
-          --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
-          --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
-          --add-opens=java.base/sun.security.action=ALL-UNNAMED
-          --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-          --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
-          -Djdk.reflect.useDirectMethodHandle=false
-          -Duniffle.test.skip.kerberos=true
-        </extraJavaTestArgs>
+        <extraJavaTestArgs>${javaModuleTestArgs}</extraJavaTestArgs>
       </properties>
       <modules>
         <module>client-spark/common</module>
@@ -2413,24 +2400,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <commons-lang3.version>3.17.0</commons-lang3.version>
-        <extraJavaTestArgs>
-          -XX:+IgnoreUnrecognizedVMOptions
-          --add-opens=java.base/java.lang=ALL-UNNAMED
-          --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
-          --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
-          --add-opens=java.base/java.io=ALL-UNNAMED
-          --add-opens=java.base/java.net=ALL-UNNAMED
-          --add-opens=java.base/java.nio=ALL-UNNAMED
-          --add-opens=java.base/java.util=ALL-UNNAMED
-          --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
-          --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
-          --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
-          --add-opens=java.base/sun.security.action=ALL-UNNAMED
-          --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-          --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
-          -Djdk.reflect.useDirectMethodHandle=false
-          -Duniffle.test.skip.kerberos=true
-        </extraJavaTestArgs>
+        <extraJavaTestArgs>${javaModuleTestArgs}</extraJavaTestArgs>
       </properties>
       <modules>
         <module>client-spark/common</module>
@@ -3103,6 +3073,20 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <!-- Tests reflect into java.base internals through Spark, Kryo and Hadoop, so Java 17+ needs
+           them opened whichever Spark profile is in play. Without this the Spark 3 client tests
+           fail with Kryo unable to create a serializer for HeapByteBuffer, and StorageUtils unable
+           to reach sun.nio.ch.DirectBuffer. The spark4 profiles set the same value, so having both
+           active is harmless. -->
+      <id>java-module-test-args</id>
+      <activation>
+        <jdk>[17,)</jdk>
+      </activation>
+      <properties>
+        <extraJavaTestArgs>${javaModuleTestArgs}</extraJavaTestArgs>
+      </properties>
     </profile>
   </profiles>
 </project>
