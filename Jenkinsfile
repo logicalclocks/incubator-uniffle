@@ -1,6 +1,6 @@
 node("local") {
   def dockerRegistry = 'n59k7749.c1.de1.container-registry.ovh.net'
-  def uniffleVersion = "0.11.0-SNAPSHOT"
+  def uniffleVersion = "0.11.0-RC0"
   // Hopsworks ships its own Spark build; -Pspark4.1 pins upstream 4.1.1 by default.
   def hopsSparkVersion = "4.1.3.0"
 
