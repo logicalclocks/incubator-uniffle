@@ -288,6 +288,16 @@
         <artifactId>protobuf-java-util</artifactId>
         <version>${protobuf.version}</version>
       </dependency>
+      <!--
+          Managed alongside protobuf-java-util so the two stay in step. Without this
+          protobuf-java floats to whatever grpc-protobuf brings (3.25.8), which is
+          lower than the -util it is paired with, and RequireUpperBoundDeps fails.
+      -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>${protobuf.version}</version>
+      </dependency>
 
       <dependency>
         <groupId>io.grpc</groupId>
