@@ -41,6 +41,20 @@
             <groupId>org.lz4</groupId>
           <artifactId>lz4-java</artifactId>
         </exclusion>
+        <!--
+            The Spark client never starts a Jetty server: JettyServer is referenced
+            only by CoordinatorServer and ShuffleServer, and no client-spark module
+            touches jetty. Excluding it keeps ~1.4k jetty classes and their CVEs out
+            of the shaded jar that gets pulled onto every Spark executor.
+        -->
+        <exclusion>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.prometheus</groupId>
+          <artifactId>simpleclient_jetty</artifactId>
+        </exclusion>
         <exclusion>
           <artifactId>log4j-slf4j-impl</artifactId>
           <groupId>org.apache.logging.log4j</groupId>
