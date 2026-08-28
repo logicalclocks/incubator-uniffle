@@ -64,8 +64,8 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <error_prone_annotations.version>2.23.0</error_prone_annotations.version>
     <execution.root>${user.dir}</execution.root>
-    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
-    <grpc.version>1.64.0</grpc.version>
+    <fasterxml.jackson.version>2.22.2</fasterxml.jackson.version>
+    <grpc.version>1.75.0</grpc.version>
     <gson.version>2.10.1</gson.version>
     <guava.version>32.1.3-jre</guava.version>
     <hadoop.scope>provided</hadoop.scope>
@@ -77,7 +77,7 @@
     <httpcore.version>4.4.4</httpcore.version>
     <java.version>1.8</java.version>
     <javax.annotation.version>1.3.2</javax.annotation.version>
-    <jetty.version>9.3.24.v20180605</jetty.version>
+    <jetty.version>9.4.58.v20250814</jetty.version>
     <hbase.thirdparty.version>4.1.4</hbase.thirdparty.version>
     <junit.jupiter.version>5.8.2</junit.jupiter.version>
     <junit.platform.version>1.8.2</junit.platform.version>
@@ -102,11 +102,11 @@
     -->
     <lz4.groupId>org.lz4</lz4.groupId>
     <lz4.version>1.8.1</lz4.version>
-    <netty.version>4.1.109.Final</netty.version>
+    <netty.version>4.1.137.Final</netty.version>
     <picocli.version>4.5.2</picocli.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <prometheus.simpleclient.version>0.9.0</prometheus.simpleclient.version>
-    <protobuf.version>3.25.1</protobuf.version>
+    <protobuf.version>3.25.9</protobuf.version>
     <roaring.bitmap.version>0.9.15</roaring.bitmap.version>
     <rss.shade.packageName>org.apache.uniffle.shaded</rss.shade.packageName>
     <skipDeploy>false</skipDeploy>
@@ -2199,10 +2199,13 @@
         <!--
             Spark 4.1's o.a.s.network.util.NettyUtils.createEventLoop references
             io.netty.channel.nio.NioIoHandler, introduced in Netty 4.2. Spark 4.1.1
-            ships against netty 4.2.7.Final; pin to the same line so test JVMs that
-            spin up a SparkContext can resolve the new IoHandler API.
+            ships against netty 4.2.7.Final; stay on the same line so test JVMs that
+            spin up a SparkContext can resolve the new IoHandler API. Held at the tip
+            of 4.2.x rather than Spark's exact 4.2.7 for CVE currency - safe because
+            client-spark/*-shaded relocates io.netty, so the shipped client never
+            collides with the netty on Spark's own classpath.
         -->
-        <netty.version>4.2.7.Final</netty.version>
+        <netty.version>4.2.17.Final</netty.version>
         <client.type>4</client.type>
         <hadoop.version>3.4.1</hadoop.version>
         <hadoop.artifact.core>hadoop-client-api</hadoop.artifact.core>
@@ -2213,8 +2216,8 @@
           is not compatible with JDK 17+.
         -->
         <hadoop.artifact.minicluster>hadoop-client-minicluster</hadoop.artifact.minicluster>
-        <fasterxml.jackson.version>2.12.7</fasterxml.jackson.version>
-        <jetty.version>9.4.53.v20231009</jetty.version>
+        <fasterxml.jackson.version>2.22.2</fasterxml.jackson.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
         <enforcer.skip>true</enforcer.skip>
         <!--
             Spark 4.1.1 ships jackson-module-scala_2.13 2.20.0, which requires

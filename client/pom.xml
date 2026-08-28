@@ -38,6 +38,16 @@
       <artifactId>shuffle-storage</artifactId>
     </dependency>
     <dependency>
+      <!--
+          DecompressionWorker uses Codec, which needs lz4 on the compile classpath.
+          Declared explicitly because common now scopes lz4 provided; provided here too,
+          since this module only runs inside a Spark/MR/Tez executor that supplies its own.
+      -->
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.uniffle</groupId>
       <artifactId>shuffle-storage</artifactId>
       <type>test-jar</type>

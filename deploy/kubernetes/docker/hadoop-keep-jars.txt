@@ -1,0 +1,46 @@
+# Jars the RSS coordinator/shuffle-server/dashboard/cli can actually reach in the
+# bundled Hadoop distribution. Derived from a jdeps -R closure over the full runtime
+# classpath and confirmed with a -Xlog:class+load trace of a real shuffle write+read:
+# only hadoop-common, woodstox-core and stax2-api are ever loaded; the rest are kept
+# because the static closure reaches them. Everything not matched here is deleted.
+# Globbed on version so a Hadoop bump does not silently drop an entry.
+share/hadoop/common/hadoop-common-*.jar
+share/hadoop/common/lib/audience-annotations-*.jar
+share/hadoop/common/lib/avro-*.jar
+share/hadoop/common/lib/bcprov-jdk18on-*.jar
+share/hadoop/common/lib/commons-codec-*.jar
+share/hadoop/common/lib/commons-collections4-*.jar
+share/hadoop/common/lib/commons-compress-*.jar
+share/hadoop/common/lib/commons-configuration2-*.jar
+share/hadoop/common/lib/commons-io-*.jar
+share/hadoop/common/lib/commons-lang3-*.jar
+share/hadoop/common/lib/commons-logging-*.jar
+share/hadoop/common/lib/commons-math3-*.jar
+share/hadoop/common/lib/commons-net-*.jar
+share/hadoop/common/lib/commons-text-*.jar
+share/hadoop/common/lib/dnsjava-*.jar
+share/hadoop/common/lib/failureaccess-*.jar
+share/hadoop/common/lib/hadoop-annotations-*.jar
+share/hadoop/common/lib/hadoop-auth-*.jar
+share/hadoop/common/lib/hadoop-shaded-guava-*.jar
+share/hadoop/common/lib/hadoop-shaded-protobuf_3_25-*.jar
+share/hadoop/common/lib/hops-metadata-dal-*.jar
+share/hadoop/common/lib/j2objc-annotations-*.jar
+share/hadoop/common/lib/javax.servlet-api-*.jar
+share/hadoop/common/lib/jaxb-api-*.jar
+share/hadoop/common/lib/jsr305-*.jar
+share/hadoop/common/lib/kerb-core-*.jar
+share/hadoop/common/lib/kerb-util-*.jar
+share/hadoop/common/lib/kerby-asn1-*.jar
+share/hadoop/common/lib/metrics-core-*.jar
+share/hadoop/common/lib/re2j-*.jar
+share/hadoop/common/lib/reload4j-*.jar
+share/hadoop/common/lib/slf4j-api-*.jar
+share/hadoop/common/lib/snappy-java-*.jar
+share/hadoop/common/lib/stax2-api-*.jar
+share/hadoop/common/lib/woodstox-core-*.jar
+share/hadoop/common/lib/zookeeper-*.jar
+share/hadoop/common/lib/zookeeper-jute-*.jar
+share/hadoop/yarn/lib/bcpkix-jdk18on-*.jar
+share/hadoop/yarn/lib/bcutil-jdk18on-*.jar
+share/hadoop/yarn/lib/objenesis-*.jar
