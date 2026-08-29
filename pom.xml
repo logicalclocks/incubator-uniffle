@@ -65,6 +65,14 @@
     <error_prone_annotations.version>2.30.0</error_prone_annotations.version>
     <execution.root>${user.dir}</execution.root>
     <fasterxml.jackson.version>2.22.2</fasterxml.jackson.version>
+    <!--
+        Since Jackson 2.20 jackson-annotations dropped the patch component from its
+        version, so it is 2.22 where core/databind are 2.22.2 - see jackson-bom's
+        jackson.version.annotations. It has to be tracked separately or the pair
+        drifts: databind 2.22 needs JsonSerializeAs, which annotations 2.20 lacks,
+        and ObjectMapper then fails to initialise.
+    -->
+    <fasterxml.jackson.annotations.version>2.22</fasterxml.jackson.annotations.version>
     <grpc.version>1.75.0</grpc.version>
     <gson.version>2.11.0</gson.version>
     <guava.version>33.3.1-jre</guava.version>
@@ -662,6 +670,18 @@
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <!--
+          Managed in step with core/databind. jackson-annotations was unmanaged and
+          floated to whatever Spark brought (2.20), which databind 2.22 cannot use -
+          JacksonAnnotationIntrospector needs JsonSerializeAs, added after 2.20, so
+          ObjectMapper fails to initialise and any SparkContext creation dies with
+          NoClassDefFoundError.
+      -->
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+        <version>${fasterxml.jackson.annotations.version}</version>
       </dependency>
       <dependency>
         <groupId>com.google.errorprone</groupId>
@@ -2249,6 +2269,7 @@
         -->
         <hadoop.artifact.minicluster>hadoop-client-minicluster</hadoop.artifact.minicluster>
         <fasterxml.jackson.version>2.22.2</fasterxml.jackson.version>
+        <fasterxml.jackson.annotations.version>2.22</fasterxml.jackson.annotations.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
         <enforcer.skip>true</enforcer.skip>
         <!--
