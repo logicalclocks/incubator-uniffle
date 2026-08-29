@@ -73,7 +73,20 @@
         and ObjectMapper then fails to initialise.
     -->
     <fasterxml.jackson.annotations.version>2.22</fasterxml.jackson.annotations.version>
-    <grpc.version>1.75.0</grpc.version>
+    <!--
+        Held at 1.64.0. grpc 1.75.0 (the fix for CVE-2025-55163) hardened HTTP/2
+        SETTINGS_MAX_FRAME_SIZE handling, and the shaded Spark client then rejects
+        the frames the shuffle server sends: "Frame length: 198903 exceeds maximum:
+        16384", and every shuffle read fails. GrpcClient only sets
+        maxInboundMessageSize, which is the gRPC message limit, not the HTTP/2 frame
+        limit, so there is nothing to raise without a code change upstream.
+        Verified by running real Spark 3.5.5 jobs against a live coordinator and
+        shuffle server: a 1.75.0 client fails against both a 1.75.0 and a 1.64.0
+        server, while a 1.64.0 client passes against both. Server-side grpc is not
+        implicated - a published 1.64.0 client passes against a 1.75.0 server - but
+        one property drives both, so it stays until the client is fixed upstream.
+    -->
+    <grpc.version>1.64.0</grpc.version>
     <gson.version>2.11.0</gson.version>
     <guava.version>33.3.1-jre</guava.version>
     <hadoop.scope>provided</hadoop.scope>
