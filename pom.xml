@@ -23,7 +23,7 @@
 
   <groupId>org.apache.uniffle</groupId>
   <artifactId>uniffle-parent</artifactId>
-  <version>0.11.0-RC0</version>
+  <version>0.11.0-RC1</version>
   <packaging>pom</packaging>
   <name>Apache Uniffle</name>
   <description>A high performance, general purpose Remote Shuffle Service.</description>
@@ -62,12 +62,33 @@
     <commons-lang3.version>3.10</commons-lang3.version>
     <commons-codec.version>1.9</commons-codec.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <error_prone_annotations.version>2.23.0</error_prone_annotations.version>
+    <error_prone_annotations.version>2.30.0</error_prone_annotations.version>
     <execution.root>${user.dir}</execution.root>
-    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.22.2</fasterxml.jackson.version>
+    <!--
+        Since Jackson 2.20 jackson-annotations dropped the patch component from its
+        version, so it is 2.22 where core/databind are 2.22.2 - see jackson-bom's
+        jackson.version.annotations. It has to be tracked separately or the pair
+        drifts: databind 2.22 needs JsonSerializeAs, which annotations 2.20 lacks,
+        and ObjectMapper then fails to initialise.
+    -->
+    <fasterxml.jackson.annotations.version>2.22</fasterxml.jackson.annotations.version>
+    <!--
+        Held at 1.64.0. grpc 1.75.0 (the fix for CVE-2025-55163) hardened HTTP/2
+        SETTINGS_MAX_FRAME_SIZE handling, and the shaded Spark client then rejects
+        the frames the shuffle server sends: "Frame length: 198903 exceeds maximum:
+        16384", and every shuffle read fails. GrpcClient only sets
+        maxInboundMessageSize, which is the gRPC message limit, not the HTTP/2 frame
+        limit, so there is nothing to raise without a code change upstream.
+        Verified by running real Spark 3.5.5 jobs against a live coordinator and
+        shuffle server: a 1.75.0 client fails against both a 1.75.0 and a 1.64.0
+        server, while a 1.64.0 client passes against both. Server-side grpc is not
+        implicated - a published 1.64.0 client passes against a 1.75.0 server - but
+        one property drives both, so it stays until the client is fixed upstream.
+    -->
     <grpc.version>1.64.0</grpc.version>
-    <gson.version>2.10.1</gson.version>
-    <guava.version>32.1.3-jre</guava.version>
+    <gson.version>2.11.0</gson.version>
+    <guava.version>33.3.1-jre</guava.version>
     <hadoop.scope>provided</hadoop.scope>
     <hadoop.version>2.8.5</hadoop.version>
     <hadoop.artifact.core>hadoop-common</hadoop.artifact.core>
@@ -77,6 +98,18 @@
     <httpcore.version>4.4.4</httpcore.version>
     <java.version>1.8</java.version>
     <javax.annotation.version>1.3.2</javax.annotation.version>
+    <!--
+        Held at 9.3.24 deliberately. Bumping the default profile to 9.4.x breaks the
+        metrics endpoint - ShuffleServerMetricsTest gets an empty body from
+        /metrics/server, /metrics/grpc and /metrics/netty - because the non-Spark
+        build serves Jersey through hbase-shaded-jersey, which does not tolerate the
+        9.4 ServletContextHandler. Not worth forcing: 9.3.24 is not affected by
+        CVE-2026-2332 or CVE-2026-10050 (those start at 9.4), and its own two Highs
+        are unreachable here - JettyServer builds only an HttpConnectionFactory so
+        HTTP/2 is never enabled (CVE-2018-12545), and addHttpsConnector is
+        conditional with no keystore configured (CVE-2021-28165). The spark4.1
+        profile overrides this to 9.4.x, where the Spark servlet stack is used.
+    -->
     <jetty.version>9.3.24.v20180605</jetty.version>
     <hbase.thirdparty.version>4.1.4</hbase.thirdparty.version>
     <junit.jupiter.version>5.8.2</junit.jupiter.version>
@@ -102,11 +135,11 @@
     -->
     <lz4.groupId>org.lz4</lz4.groupId>
     <lz4.version>1.8.1</lz4.version>
-    <netty.version>4.1.109.Final</netty.version>
+    <netty.version>4.1.137.Final</netty.version>
     <picocli.version>4.5.2</picocli.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <prometheus.simpleclient.version>0.9.0</prometheus.simpleclient.version>
-    <protobuf.version>3.25.1</protobuf.version>
+    <protobuf.version>3.25.9</protobuf.version>
     <roaring.bitmap.version>0.9.15</roaring.bitmap.version>
     <rss.shade.packageName>org.apache.uniffle.shaded</rss.shade.packageName>
     <skipDeploy>false</skipDeploy>
@@ -276,6 +309,16 @@
         <artifactId>protobuf-java-util</artifactId>
         <version>${protobuf.version}</version>
       </dependency>
+      <!--
+          Managed alongside protobuf-java-util so the two stay in step. Without this
+          protobuf-java floats to whatever grpc-protobuf brings (3.25.8), which is
+          lower than the -util it is paired with, and RequireUpperBoundDeps fails.
+      -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>${protobuf.version}</version>
+      </dependency>
 
       <dependency>
         <groupId>io.grpc</groupId>
@@ -323,6 +366,16 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
+      </dependency>
+      <!--
+          Not a direct dependency; pinned only to satisfy RequireUpperBoundDeps.
+          guava ${guava.version} wants 3.0.0 while protobuf-java-util still asks
+          for 2.8, and without a managed version the enforcer picks the lower one.
+      -->
+      <dependency>
+        <groupId>com.google.j2objc</groupId>
+        <artifactId>j2objc-annotations</artifactId>
+        <version>3.0.0</version>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
@@ -630,6 +683,18 @@
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <!--
+          Managed in step with core/databind. jackson-annotations was unmanaged and
+          floated to whatever Spark brought (2.20), which databind 2.22 cannot use -
+          JacksonAnnotationIntrospector needs JsonSerializeAs, added after 2.20, so
+          ObjectMapper fails to initialise and any SparkContext creation dies with
+          NoClassDefFoundError.
+      -->
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+        <version>${fasterxml.jackson.annotations.version}</version>
       </dependency>
       <dependency>
         <groupId>com.google.errorprone</groupId>
@@ -2199,10 +2264,13 @@
         <!--
             Spark 4.1's o.a.s.network.util.NettyUtils.createEventLoop references
             io.netty.channel.nio.NioIoHandler, introduced in Netty 4.2. Spark 4.1.1
-            ships against netty 4.2.7.Final; pin to the same line so test JVMs that
-            spin up a SparkContext can resolve the new IoHandler API.
+            ships against netty 4.2.7.Final; stay on the same line so test JVMs that
+            spin up a SparkContext can resolve the new IoHandler API. Held at the tip
+            of 4.2.x rather than Spark's exact 4.2.7 for CVE currency - safe because
+            client-spark/*-shaded relocates io.netty, so the shipped client never
+            collides with the netty on Spark's own classpath.
         -->
-        <netty.version>4.2.7.Final</netty.version>
+        <netty.version>4.2.17.Final</netty.version>
         <client.type>4</client.type>
         <hadoop.version>3.4.1</hadoop.version>
         <hadoop.artifact.core>hadoop-client-api</hadoop.artifact.core>
@@ -2213,8 +2281,9 @@
           is not compatible with JDK 17+.
         -->
         <hadoop.artifact.minicluster>hadoop-client-minicluster</hadoop.artifact.minicluster>
-        <fasterxml.jackson.version>2.12.7</fasterxml.jackson.version>
-        <jetty.version>9.4.53.v20231009</jetty.version>
+        <fasterxml.jackson.version>2.22.2</fasterxml.jackson.version>
+        <fasterxml.jackson.annotations.version>2.22</fasterxml.jackson.annotations.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
         <enforcer.skip>true</enforcer.skip>
         <!--
             Spark 4.1.1 ships jackson-module-scala_2.13 2.20.0, which requires

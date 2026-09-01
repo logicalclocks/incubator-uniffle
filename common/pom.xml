@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.uniffle</groupId>
     <artifactId>uniffle-parent</artifactId>
-    <version>0.11.0-RC0</version>
+    <version>0.11.0-RC1</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -85,6 +85,14 @@
     <dependency>
       <groupId>org.lz4</groupId>
       <artifactId>lz4-java</artifactId>
+      <!--
+          provided: Lz4Codec compiles against lz4 but nothing on the server side ever
+          constructs a codec, and the Spark/MR/Tez clients get lz4 from their own runtime
+          (see the "use the lz4 from spark env" exclusions in client-spark/*-shaded).
+          Keeping it off the runtime classpath stops it shipping into
+          jars/{server,coordinator,dashboard,cli}, where it is dead weight.
+      -->
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
