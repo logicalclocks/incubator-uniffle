@@ -19,6 +19,9 @@
 ARG BASE_IMAGE=eclipse-temurin:11-jdk
 FROM ${BASE_IMAGE}
 
+# The packages below ship stale in the base image and are not refreshed by the
+# install above. Keep this list in sync with HWORKS-3165.
 RUN apt-get update && \
     apt-get install -y zlib1g zlib1g-dev lzop lsof netcat-openbsd dnsutils less procps iputils-ping curl && \
+    apt-get install -y --only-upgrade curl libcurl4t64 libgnutls30t64 linux-libc-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/*

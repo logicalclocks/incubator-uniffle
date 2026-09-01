@@ -41,7 +41,12 @@ FROM debian:13-slim
 # each stage.
 ARG MODULE
 WORKDIR /
-RUN apt-get update && apt-get clean && rm -rf /var/lib/apt/lists/*
+# The packages below ship stale in debian:13-slim. Keep this list in sync with
+# HWORKS-3166 and HWORKS-3167.
+RUN apt-get update && \
+    apt-get install -y --only-upgrade util-linux mount login libuuid1 libsmartcols1 \
+        libmount1 liblastlog2-2 libblkid1 bsdutils openssl-provider-legacy libssl3t64 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /workspace/${MODULE} .
 ENV OPERATOR_BIN=${MODULE}
 ENTRYPOINT ["/${OPERATOR_BIN}"]
