@@ -36,7 +36,16 @@ COPY pkg/ pkg/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o ${MODULE} cmd/${MODULE}/main.go
 
 
-FROM debian:13-slim
+# Ubuntu rather than debian:13-slim: the Debian base shipped perl-base, the
+# util-linux family, ncurses and sqlite3, whose 3 Critical and ~50 High CVEs have
+# no fixed version to upgrade to. None of them are reachable from a static
+# CGO_ENABLED=0 binary, but they cannot be cleared without leaving the distro.
+#
+# 24.04 rather than 26.04, measured as built here: 10 findings against 29, and
+# nothing at CVSS >= 7.6 against 26.04's rust-coreutils 7.9 - which has no fix
+# and exists only because 26.04 replaced GNU coreutils with Rust uutils. 24.04
+# also ships no /usr/bin/pebble, so there is nothing to delete afterwards.
+FROM ubuntu:24.04
 # docker's ARG scope doc: https://docs.docker.com/engine/reference/builder/#scope, it's required to declear an arg in
 # each stage.
 ARG MODULE
