@@ -74,19 +74,27 @@
     -->
     <fasterxml.jackson.annotations.version>2.22</fasterxml.jackson.annotations.version>
     <!--
-        Held at 1.64.0. grpc 1.75.0 (the fix for CVE-2025-55163) hardened HTTP/2
-        SETTINGS_MAX_FRAME_SIZE handling, and the shaded Spark client then rejects
-        the frames the shuffle server sends: "Frame length: 198903 exceeds maximum:
-        16384", and every shuffle read fails. GrpcClient only sets
-        maxInboundMessageSize, which is the gRPC message limit, not the HTTP/2 frame
-        limit, so there is nothing to raise without a code change upstream.
-        Verified by running real Spark 3.5.5 jobs against a live coordinator and
-        shuffle server: a 1.75.0 client fails against both a 1.75.0 and a 1.64.0
-        server, while a 1.64.0 client passes against both. Server-side grpc is not
-        implicated - a published 1.64.0 client passes against a 1.75.0 server - but
-        one property drives both, so it stays until the client is fixed upstream.
+        Two grpc lines, deliberately. ${grpc.version} is what the coordinator,
+        shuffle server, dashboard and cli build against - the server side, which is
+        all the rss image ships - and it carries the fix for CVE-2025-55163. Every
+        spark profile pins it back to ${grpc.client.version} for the shaded client.
+
+        The client cannot follow. grpc 1.75.0 hardened HTTP/2 SETTINGS_MAX_FRAME_SIZE
+        handling, and the shaded Spark client then rejects the frames the shuffle
+        server sends: "Frame length: 198903 exceeds maximum: 16384", and every
+        shuffle read fails. GrpcClient only sets maxInboundMessageSize, which is the
+        gRPC message limit, not the HTTP/2 frame limit, so there is nothing to raise
+        without a code change upstream. Verified by running real Spark 3.5.5 jobs
+        against a live coordinator and shuffle server: a 1.75.0 client fails against
+        both a 1.75.0 and a 1.64.0 server, while a 1.64.0 client passes against both
+        - which is what makes splitting the two safe.
+
+        The two never meet in one build: client-spark/* is only in the reactor when a
+        spark profile is active, and build_distribution.sh builds the server
+        distribution and each shaded client in separate maven invocations.
     -->
-    <grpc.version>1.64.0</grpc.version>
+    <grpc.version>1.75.0</grpc.version>
+    <grpc.client.version>1.64.0</grpc.client.version>
     <gson.version>2.11.0</gson.version>
     <guava.version>33.3.1-jre</guava.version>
     <hadoop.scope>provided</hadoop.scope>
@@ -99,16 +107,34 @@
     <java.version>1.8</java.version>
     <javax.annotation.version>1.3.2</javax.annotation.version>
     <!--
-        Held at 9.3.24 deliberately. Bumping the default profile to 9.4.x breaks the
-        metrics endpoint - ShuffleServerMetricsTest gets an empty body from
-        /metrics/server, /metrics/grpc and /metrics/netty - because the non-Spark
-        build serves Jersey through hbase-shaded-jersey, which does not tolerate the
-        9.4 ServletContextHandler. Not worth forcing: 9.3.24 is not affected by
-        CVE-2026-2332 or CVE-2026-10050 (those start at 9.4), and its own two Highs
-        are unreachable here - JettyServer builds only an HttpConnectionFactory so
-        HTTP/2 is never enabled (CVE-2018-12545), and addHttpsConnector is
-        conditional with no keystore configured (CVE-2021-28165). The spark4.1
-        profile overrides this to 9.4.x, where the Spark servlet stack is used.
+        Held at 9.3.24, and moving to 9.4 is not the CVE win it looks like -
+        measured, do not redo it. 9.4.58 is the newest 9.4 on Maven Central and it
+        trades this version's two Highs for two others of its own:
+        CVE-2026-2332 in jetty-http and CVE-2026-10050 in jetty-security. Their
+        fixes are 9.4.60 and 9.4.63, which are Webtide extended-support builds and
+        404 on Central, so the count does not move. It arguably gets worse:
+        9.3.24's pair is unreachable here, while CVE-2026-2332 is HTTP/1.1 request
+        smuggling in a parser every metrics request goes through.
+
+        Unreachable, for the record: JettyServer builds only an
+        HttpConnectionFactory and no jetty-http2-server jar ships, so HTTP/2 can
+        never be negotiated (CVE-2018-12545); addHttpsConnector is gated on
+        rss.jetty.ssl.enable, which defaults false and is set by neither the image
+        conf nor the chart's rss-config-map (CVE-2021-28165); and no Digest auth is
+        ever configured (CVE-2026-10050, on the 9.4 side).
+
+        Escaping both pairs means jetty 10+, which needs Java 11 - this build
+        targets ${java.version}.
+
+        Two things to know if you try anyway. hbase-shaded-jersey is NOT the
+        blocker any more: 4.1.4 tolerates the 9.4 ServletContextHandler and
+        ShuffleServerMetricsTest passes 7/7 on it. The blocker is hadoop 3.2.1,
+        whose HttpServer2.initializeWebServer calls SessionHandler.getSessionManager(),
+        removed in 9.4, so every MiniDFSCluster test dies with NoSuchMethodError;
+        hadoop moved to jetty 9.4 in 3.3.0, so hadoop.version has to move first.
+
+        The spark4.x profiles override this to 9.4.x, where the Spark servlet
+        stack is used and no MiniDFSCluster runs.
     -->
     <jetty.version>9.3.24.v20180605</jetty.version>
     <hbase.thirdparty.version>4.1.4</hbase.thirdparty.version>
@@ -1496,6 +1522,7 @@
     <profile>
       <id>spark2</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.11</scala.binary.version>
         <spark.version>2.4.6</spark.version>
         <client.type>2</client.type>
@@ -1556,6 +1583,7 @@
     <profile>
       <id>spark2.3</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.11</scala.binary.version>
         <spark.version>2.3.4</spark.version>
         <client.type>2</client.type>
@@ -1613,6 +1641,7 @@
     <profile>
       <id>spark3</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.1.2</spark.version>
         <client.type>3</client.type>
@@ -1700,6 +1729,7 @@
     <profile>
       <id>spark3.2</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.2.1</spark.version>
         <client.type>3</client.type>
@@ -1796,6 +1826,7 @@
     <profile>
       <id>spark3.3</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.3.1</spark.version>
         <client.type>3</client.type>
@@ -1892,6 +1923,7 @@
     <profile>
       <id>spark3.4</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.4.1</spark.version>
         <client.type>3</client.type>
@@ -2003,6 +2035,7 @@
     <profile>
       <id>spark3.5</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.5.5</spark.version>
         <client.type>3</client.type>
@@ -2113,6 +2146,7 @@
     <profile>
       <id>spark4</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.13</scala.binary.version>
         <scala.version>2.13.16</scala.version>
         <spark.version>4.0.2</spark.version>
@@ -2258,6 +2292,7 @@
           separate invocations.
       -->
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.13</scala.binary.version>
         <scala.version>2.13.16</scala.version>
         <spark.version>4.1.1</spark.version>
@@ -2425,6 +2460,7 @@
           lock-step when editing.
       -->
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.13</scala.binary.version>
         <scala.version>2.13.18</scala.version>
         <spark.version>4.2.0</spark.version>
@@ -2585,6 +2621,7 @@
     <profile>
       <id>spark3.2.0</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.2.0</spark.version>
         <client.type>3</client.type>
@@ -2681,6 +2718,7 @@
     <profile>
       <id>spark3.0</id>
       <properties>
+        <grpc.version>${grpc.client.version}</grpc.version>
         <scala.binary.version>2.12</scala.binary.version>
         <spark.version>3.0.1</spark.version>
         <client.type>3</client.type>
