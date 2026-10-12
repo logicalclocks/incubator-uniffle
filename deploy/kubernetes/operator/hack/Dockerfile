@@ -16,7 +16,9 @@
 #
 
 # Build the binary
-FROM golang:1.25 as builder
+# 1.25 is out of support and gets no stdlib fixes; 1.26.9 is the floor for the
+# current advisories.
+FROM golang:1.26.9 as builder
 
 ARG MODULE
 WORKDIR /workspace
