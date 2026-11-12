@@ -104,7 +104,9 @@ node("local") {
       // ImageBuilder would skip every registry that already holds the tag, so the jars
       // would move and the images would not.
       builder.immutable = !params.FORCE_BUILD
-      def missing = missingImages(builder, images, version)
+      // auth() and imageExists() called from the script need the builder's isolated
+      // Docker config (jenkins-library README, "Docker authentication scope").
+      def missing = builder.withDockerConfig { missingImages(builder, images, version) }
       def total = images.size() * builder.REGISTRIES.size()
       if (params.FORCE_BUILD) {
         echo "FORCE  ${version} is rebuilt and pushed to every registry; ${missing.size()} of ${total} images are missing today."
