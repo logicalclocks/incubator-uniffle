@@ -16,9 +16,8 @@
 #
 
 # Build the binary
-# 1.25 is out of support and gets no stdlib fixes; 1.26.9 is the floor for the
-# current advisories.
-FROM golang:1.26.9 as builder
+# Keep the builder aligned with the patched toolchain in go.mod.
+FROM golang:1.27.4 as builder
 
 ARG MODULE
 WORKDIR /workspace

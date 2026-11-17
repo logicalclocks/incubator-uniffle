@@ -87,6 +87,7 @@ var _ = BeforeSuite(
 
 		cfg := &config.Config{
 			LeaderElection: false,
+			WebhookName:    webhookconstants.ComponentName,
 			HTTPConfig: config.HTTPConfig{
 				Port:            9876,
 				ExternalService: webhookconstants.ComponentName,
@@ -147,7 +148,12 @@ var _ = Describe("AdmissionManager", func() {
 			By("Check lease object when disabling leader election")
 			leaseList, leaseErr := kubeClient.CoordinationV1().Leases(corev1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 			Expect(leaseErr).ToNot(HaveOccurred())
-			Expect(len(leaseList.Items)).To(Equal(0))
+			// Kubernetes also creates API-server identity leases. Only the
+			// webhook's own lease indicates that its leader election is active.
+			cfg := &config.Config{WebhookName: webhookconstants.ComponentName}
+			for _, lease := range leaseList.Items {
+				Expect(lease.Name).NotTo(Equal(cfg.LeaderElectionID()))
+			}
 		})
 	})
 })
