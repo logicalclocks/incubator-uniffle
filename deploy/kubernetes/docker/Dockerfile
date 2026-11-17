@@ -1,6 +1,19 @@
 # syntax=docker/dockerfile:experimental
 
-ARG BASE_IMAGE=uniffle-base:latest
+# The base image is a stage of this file rather than a separately built image so a
+# single `docker buildx build` of this directory produces the rss image: the shared
+# Jenkins ImageBuilder builds and pushes with one command per registry and cannot see
+# images that only exist in the local daemon. --build-arg BASE_IMAGE=<ref> still
+# substitutes any image for the stage, as build.sh --base-image does.
+ARG JDK_IMAGE=eclipse-temurin:17-jdk
+ARG BASE_IMAGE=uniffle-base
+
+FROM ${JDK_IMAGE} AS uniffle-base
+
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y zlib1g lzop lsof netcat-openbsd dnsutils less procps iputils-ping curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Unpacked in a throwaway stage. Extracting in the final image costs 2 GB: each
 # tarball stays in its own COPY layer once a later RUN deletes it, and the

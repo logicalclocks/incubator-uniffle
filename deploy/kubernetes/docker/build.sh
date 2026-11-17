@@ -29,9 +29,9 @@ function exit_with_usage() {
   echo "+------------------------------------------------------------------------------------------------------+"
   echo "| ./build.sh [--hadoop-version <hadoop version>] [--hadoop-profile <maven profile id>]                 |"
   echo "|            [--registry <registry url>] [--author <author name>]                                      |"
-  echo "|            [--base-os-distribution <os distribution>] [--base-image <base image url>]                |"
-  echo "|            [--push-image <true|false>] [--apache-mirror <apache mirror url>] [--nexus-user <nexus username>]
-                     [--nexus-password <nexus password>]  |"
+  echo "|            [--base-image <base image url>] [--push-image <true|false>] [--prepare-only <true|false>]  |"
+  echo "|            [--apache-mirror <apache mirror url>] [--nexus-user <nexus username>]                      |"
+  echo "|            [--nexus-password <nexus password>]                                                       |"
   echo "+------------------------------------------------------------------------------------------------------+"
   exit 1
 }
@@ -45,9 +45,13 @@ HADOOP_PROFILE=""
 AUTHOR=$(whoami)
 # If you are based in China, you could pass --apache-mirror <a_mirror_url> when building this.
 APACHE_MIRROR="https://dlcdn.apache.org"
-OS_DISTRIBUTION=debian
+# Empty selects the uniffle-base stage of the Dockerfile.
 BASE_IMAGE=""
 PUSH_IMAGE="false"
+# true stages the tarballs next to the Dockerfile and writes the build arguments to
+# image-build.env, then stops without building. Jenkins uses it so the shared
+# ImageBuilder can run the build and push to every registry itself.
+PREPARE_ONLY="false"
 
 while (( "$#" )); do
   case $1 in
@@ -67,16 +71,16 @@ while (( "$#" )); do
       AUTHOR="$2"
       shift
       ;;
-    --base-os-distribution)
-      OS_DISTRIBUTION="$2"
-      shift
-      ;;
     --base-image)
       BASE_IMAGE="$2"
       shift
       ;;
     --push-image)
       PUSH_IMAGE="$2"
+      shift
+      ;;
+    --prepare-only)
+      PREPARE_ONLY="$2"
       shift
       ;;
     --nexus-user)
@@ -114,13 +118,10 @@ if [ -z "$HADOOP_PROFILE" ]; then
 fi
 HADOOP_SHORT_VERSION=${HADOOP_PROFILE#hadoop}
 
-if [ -z "$BASE_IMAGE" ]; then
-  echo "start building base image: uniffle-base"
-  docker build -t "uniffle-base:latest" \
-    -f base/"${OS_DISTRIBUTION}"/Dockerfile .
-  BASE_IMAGE="uniffle-base:latest"
-else
+BASE_IMAGE_ARG=()
+if [ -n "$BASE_IMAGE" ]; then
   echo "using base image(${BASE_IMAGE}) to build rss server"
+  BASE_IMAGE_ARG=(--build-arg BASE_IMAGE="$BASE_IMAGE")
 fi
 
 HADOOP_FILE=hops-$HADOOP_VERSION.tgz
@@ -152,17 +153,37 @@ IMAGE_VERSION=$(cat $RSS_DIR/version.txt | awk '{$1=$1; print}' | sed '/^$/d')
 IMAGE=$REGISTRY/rss-server:$IMAGE_VERSION
 echo "image version: ${IMAGE_VERSION}"
 IMAGE=$REGISTRY/hopsworks/rss:$IMAGE_VERSION
+
+# One line per --build-arg, in the form the Jenkinsfile reads back and passes to the
+# ImageBuilder through build-manifest.json.
+cat > image-build.env <<EOF
+RSS_VERSION=$RSS_VERSION
+HADOOP_VERSION=$HADOOP_VERSION
+HADOOP_SHORT_VERSION=$HADOOP_SHORT_VERSION
+HADOOP_FILE=$HADOOP_FILE
+AUTHOR=$AUTHOR
+GIT_COMMIT=$GIT_COMMIT
+GIT_BRANCH=$GIT_BRANCH
+EOF
+
+if [ x"${PREPARE_ONLY}" == x"true" ]; then
+  echo "build context prepared for $IMAGE, build arguments in image-build.env"
+  exit 0
+fi
+
 echo "building image: $IMAGE"
 
-DOCKER_BUILDKIT=1 docker build --network=host -t "$IMAGE" \
+# --pull refreshes the JDK tag the uniffle-base stage starts from: without it a cached
+# tag keeps shipping packages that a rebuild was meant to move.
+DOCKER_BUILDKIT=1 docker build --network=host --pull -t "$IMAGE" \
              --build-arg RSS_VERSION="$RSS_VERSION" \
              --build-arg HADOOP_VERSION="$HADOOP_VERSION" \
              --build-arg HADOOP_SHORT_VERSION="$HADOOP_SHORT_VERSION" \
              --build-arg AUTHOR="$AUTHOR" \
              --build-arg GIT_COMMIT="$GIT_COMMIT" \
              --build-arg GIT_BRANCH="$GIT_BRANCH" \
-             --build-arg BASE_IMAGE="$BASE_IMAGE" \
              --build-arg HADOOP_FILE="$HADOOP_FILE" \
+             ${BASE_IMAGE_ARG[@]+"${BASE_IMAGE_ARG[@]}"} \
              -f Dockerfile --no-cache .
 
 if [ x"${PUSH_IMAGE}" == x"true" ]; then

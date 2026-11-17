@@ -57,3 +57,5 @@ rust/experimental/server/.idea
 rust/experimental/server/._target
 rust/experimental/server/src/proto/uniffle.rs
 .flattened-pom.xml
+hops-*.tgz
+deploy/kubernetes/docker/image-build.env

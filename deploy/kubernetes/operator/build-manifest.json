@@ -1,0 +1,16 @@
+[
+    {
+        "name": "hopsworks/rss-controller",
+        "version": "env:RSS_IMAGE_VERSION",
+        "dockerFile": "hack/Dockerfile",
+        "changeDirectory": "false",
+        "extraDockerArgs": "--pull --build-arg MODULE=controller"
+    },
+    {
+        "name": "hopsworks/rss-webhook",
+        "version": "env:RSS_IMAGE_VERSION",
+        "dockerFile": "hack/Dockerfile",
+        "changeDirectory": "false",
+        "extraDockerArgs": "--pull --build-arg MODULE=webhook"
+    }
+]

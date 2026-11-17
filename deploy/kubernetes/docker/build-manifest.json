@@ -1,0 +1,17 @@
+[
+    {
+        "name": "hopsworks/rss",
+        "version": "env:RSS_IMAGE_VERSION",
+        "dockerFile": "Dockerfile",
+        "variables": [
+            "RSS_VERSION",
+            "HADOOP_VERSION",
+            "HADOOP_SHORT_VERSION",
+            "HADOOP_FILE",
+            "AUTHOR",
+            "GIT_COMMIT",
+            "GIT_BRANCH"
+        ],
+        "extraDockerArgs": "--pull --build-arg RSS_VERSION=${RSS_VERSION} --build-arg HADOOP_VERSION=${HADOOP_VERSION} --build-arg HADOOP_SHORT_VERSION=${HADOOP_SHORT_VERSION} --build-arg HADOOP_FILE=${HADOOP_FILE} --build-arg AUTHOR=${AUTHOR} --build-arg GIT_COMMIT=${GIT_COMMIT} --build-arg GIT_BRANCH=${GIT_BRANCH}"
+    }
+]

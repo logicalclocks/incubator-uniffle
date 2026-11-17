@@ -1368,7 +1368,7 @@
                 <resourceBundle>org.apache:apache-jar-resource-bundle:1.4
                 </resourceBundle>
                 <resourceBundle>
-                  org.apache.apache.resources:apache-incubator-disclaimer-resource-bundle:1.2-SNAPSHOT
+                  org.apache.apache.resources:apache-incubator-disclaimer-resource-bundle:1.8
                 </resourceBundle>
               </resourceBundles>
             </configuration>
@@ -1412,6 +1412,8 @@
             <exclude>src/test/resources/empty</exclude>
             <exclude>**/dependency-reduced-pom.xml</exclude>
             <exclude>.github/PULL_REQUEST_TEMPLATE</exclude>
+            <exclude>deploy/kubernetes/docker/build-manifest.json</exclude>
+            <exclude>deploy/kubernetes/operator/build-manifest.json</exclude>
             <exclude>deploy/kubernetes/operator/go.mod</exclude>
             <exclude>deploy/kubernetes/operator/go.sum</exclude>
             <exclude>deploy/kubernetes/operator/PROJECT</exclude>
