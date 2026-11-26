@@ -84,7 +84,7 @@ node("local") {
   def hopsSparkVersion = "4.1.3.0"
   // The Hadoop distribution shipped in the rss image, and the maven profile the
   // distribution was built with (names the rss tarball).
-  def hadoopVersion = "3.4.3.3-EE-RC0"
+  def hadoopVersion = "3.4.3.4-EE-RC0"
   def hadoopProfile = "hadoop3.2"
   // The images of the two build manifests, by name.
   def images = ["hopsworks/rss", "hopsworks/rss-controller", "hopsworks/rss-webhook"]
